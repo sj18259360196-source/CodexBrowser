@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppState,
+  BrowserSkill,
+  BrowserSkillRun,
+  BrowserSkillStatus,
   BrowserTabSummary,
   CredentialVaultStatus,
   DesktopBridge,
@@ -50,6 +53,26 @@ const bridge: DesktopBridge = {
   openDownloads: () => ipcRenderer.invoke("downloads:open") as Promise<void>,
   openDownload: (downloadId) => ipcRenderer.invoke("downloads:open-item", downloadId) as Promise<void>,
   openDocument: (documentId) => ipcRenderer.invoke("document:open", documentId) as Promise<void>,
+  saveBrowserSkill: (skill) => ipcRenderer.invoke("browser-skill:save", skill) as Promise<BrowserSkill>,
+  setBrowserSkillStatus: (skillId, status) => ipcRenderer.invoke(
+    "browser-skill:set-status",
+    skillId,
+    status,
+  ) as Promise<BrowserSkill>,
+  deleteBrowserSkill: (skillId) => ipcRenderer.invoke("browser-skill:delete", skillId) as Promise<void>,
+  importBrowserSkill: () => ipcRenderer.invoke("browser-skill:import") as Promise<BrowserSkill | null>,
+  exportBrowserSkill: (skillId) => ipcRenderer.invoke("browser-skill:export", skillId) as Promise<boolean>,
+  createBrowserSkillFromTrace: (traceId) => ipcRenderer.invoke(
+    "browser-skill:create-from-trace",
+    traceId,
+  ) as Promise<BrowserSkill>,
+  discardBrowserSkillTrace: (traceId) => ipcRenderer.invoke("browser-skill:discard-trace", traceId) as Promise<void>,
+  runBrowserSkill: (skillId, inputs, userConfirmed) => ipcRenderer.invoke(
+    "browser-skill:run",
+    skillId,
+    inputs,
+    userConfirmed,
+  ) as Promise<BrowserSkillRun>,
 };
 
 contextBridge.exposeInMainWorld("codexBrowser", bridge);

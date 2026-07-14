@@ -23,17 +23,25 @@ import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import {
   BROWSER_PROTOCOL_VERSION,
+  DEFAULT_BROWSER_PIPE_NAME,
   type AppState,
   type AssistanceKind,
   type AuthPrompt,
   type BrowserAction,
   type BrowserDialogPrompt,
   type BrowserObservation,
+  type BrowserSkill,
+  type BrowserSkillRisk,
+  type BrowserSkillRun,
+  type BrowserSkillStatus,
+  type BrowserSkillTarget,
   type BrowserTabSummary,
   type BrowserWaitCondition,
   type CredentialVaultStatus,
   type DownloadItem,
   type HumanAssistance,
+  type InteractiveElementSnapshot,
+  type InteractivePageSnapshot,
   type PipeRequest,
   type PipeResponse,
   type SessionHealth,
@@ -46,17 +54,24 @@ import {
   waitForBrowserCondition,
 } from "./browser-actions";
 import { DocumentService } from "./document-service";
+import {
+  BrowserSkillService,
+  isLearnableBrowserSkillMethod,
+  isTraceableBrowserSkillMethod,
+  type BrowserSkillTraceOperationInput,
+} from "./browser-skill-service";
 import { PersistenceService, type PersistedBrowserTab } from "./persistence-service";
 
-const pipeName = (process.env.CODEX_BROWSER_PIPE_NAME || "codex-browser-v1")
+const pipeName = (process.env.CODEX_BROWSER_PIPE_NAME || DEFAULT_BROWSER_PIPE_NAME)
   .trim()
   .replace(/[^a-zA-Z0-9._-]+/g, "-")
   .replace(/-+/g, "-")
   .replace(/^[.-]+|[.-]+$/g, "")
-  .slice(0, 80) || "codex-browser-v1";
+  .slice(0, 80) || DEFAULT_BROWSER_PIPE_NAME;
 const PIPE_PATH = process.platform === "win32" ? `\\\\.\\pipe\\${pipeName}` : `/tmp/${pipeName}.sock`;
 const PROFILE_ID = "primary";
 const PROFILE_PARTITION = `persist:codex-browser-${PROFILE_ID}`;
+const APP_ID = "com.codex.browser";
 const HOME_URL = "https://www.crossref.org/";
 const MAX_TABS = 8;
 const MAX_TASKS = 80;
@@ -70,6 +85,13 @@ const runtimeLogDir = path.join(process.cwd(), ".runtime");
 const runtimeLogPath = path.join(runtimeLogDir, "main.log");
 const userDataOverride = process.env.CODEX_BROWSER_USER_DATA_DIR?.trim();
 if (userDataOverride) app.setPath("userData", path.resolve(userDataOverride));
+
+function brandingPath(fileName: string): string {
+  const brandingDir = app.isPackaged
+    ? path.join(process.resourcesPath, "branding")
+    : path.join(process.cwd(), "assets", "branding");
+  return path.join(brandingDir, fileName);
+}
 
 function logRuntime(message: string, error?: unknown): void {
   try {
@@ -92,6 +114,7 @@ let tray: Tray | null = null;
 let pipeServer: Server | null = null;
 let documentService: DocumentService;
 let persistenceService: PersistenceService | null = null;
+let browserSkillService: BrowserSkillService | null = null;
 let downloadsDir = "";
 let isQuitting = false;
 let shutdownInProgress = false;
@@ -128,6 +151,7 @@ interface BrowserTabRecord {
 }
 const browserTabs = new Map<string, BrowserTabRecord>();
 const snapshotRevisions = new Map<string, number>();
+const latestSnapshots = new Map<string, InteractivePageSnapshot>();
 const dialogTaskIds = new Map<string, string>();
 let activeTabId = "";
 let browserBounds = { x: 300, y: 100, width: 1100, height: 700 };
@@ -180,10 +204,15 @@ const state: AppState = {
     taskCount: 0,
     downloadCount: 0,
     documentCount: 0,
+    browserSkillCount: 0,
+    browserSkillTraceCount: 0,
   },
   tasks: [],
   downloads: [],
   documents: [],
+  browserSkills: [],
+  browserSkillTraces: [],
+  browserSkillRun: null,
 };
 
 function desktopState(): AppState {
@@ -192,6 +221,23 @@ function desktopState(): AppState {
     tasks: state.tasks.map((task) => ({ ...task })),
     downloads: state.downloads.map(({ path: _path, ...download }) => ({ ...download })),
     documents: state.documents.map((document) => ({ ...document })),
+    browserSkills: state.browserSkills.map((skill) => ({
+      ...skill,
+      trigger: {
+        hosts: [...skill.trigger.hosts],
+        pathPatterns: [...skill.trigger.pathPatterns],
+        keywords: [...skill.trigger.keywords],
+      },
+      inputs: skill.inputs.map((input) => ({ ...input })),
+      steps: skill.steps.map((step) => ({
+        ...step,
+        params: structuredClone(step.params),
+        target: step.target ? { ...step.target } : undefined,
+      })),
+      stats: { ...skill.stats },
+    })),
+    browserSkillTraces: state.browserSkillTraces.map((trace) => ({ ...trace })),
+    browserSkillRun: state.browserSkillRun ? { ...state.browserSkillRun } : null,
     tabs: state.tabs.map((tab) => ({ ...tab })),
     authPrompt: state.authPrompt ? { ...state.authPrompt } : null,
     assistance: state.assistance ? { ...state.assistance } : null,
@@ -247,6 +293,8 @@ function mcpState(): AppState {
     ...download,
     url: sanitizeResourceUrl(download.url),
   }));
+  snapshot.browserSkills = [];
+  snapshot.browserSkillTraces = [];
   return snapshot;
 }
 
@@ -276,6 +324,24 @@ function refreshStorageSummary(): void {
   state.storage.taskCount = state.tasks.length;
   state.storage.downloadCount = state.downloads.length;
   state.storage.documentCount = state.documents.length;
+  state.storage.browserSkillCount = state.browserSkills.length;
+  state.storage.browserSkillTraceCount = state.browserSkillTraces.length;
+}
+
+async function refreshBrowserSkillState(): Promise<void> {
+  if (!browserSkillService) {
+    state.browserSkills = [];
+    state.browserSkillTraces = [];
+    refreshStorageSummary();
+    return;
+  }
+  const [skills, traces] = await Promise.all([
+    browserSkillService.listSkills(true),
+    browserSkillService.listTraceSummaries(),
+  ]);
+  state.browserSkills = skills;
+  state.browserSkillTraces = traces;
+  refreshStorageSummary();
 }
 
 function refreshCredentialVaultStatus(value = state.authPrompt?.url || state.url): CredentialVaultStatus {
@@ -572,6 +638,7 @@ function removeBrowserTabRecord(tabId: string): void {
   if (!record) return;
   browserTabs.delete(tabId);
   snapshotRevisions.delete(tabId);
+  latestSnapshots.delete(tabId);
   loadedPdfResponses.delete(tabId);
   for (const key of pendingPdfResponses.keys()) {
     if (key.startsWith(`${tabId}:`)) pendingPdfResponses.delete(key);
@@ -2209,7 +2276,357 @@ async function captureBrowserScreenshot(params: Record<string, unknown>) {
   }
 }
 
-async function handleCommand(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+interface BrowserCommandContext {
+  clientSessionId?: string;
+  recordSkillTrace?: boolean;
+}
+
+interface BrowserSkillTraceParams {
+  params: Record<string, unknown>;
+  inputLabels: Record<string, string>;
+}
+
+const browserSkillCommandLabels: Record<string, string> = {
+  "browser.tab_new": "新建标签页",
+  "browser.tab_select": "切换标签页",
+  "browser.tab_close": "关闭标签页",
+  "browser.navigate": "打开网页",
+  "browser.act": "操作页面元素",
+  "browser.wait": "等待页面条件",
+  "browser.back": "后退",
+  "browser.forward": "前进",
+  "browser.reload": "刷新页面",
+};
+
+function cleanLocatorText(value: string | undefined, limit = 240): string | undefined {
+  const cleaned = value?.replace(/[\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, limit);
+  return cleaned || undefined;
+}
+
+function browserSkillTargetFromElement(element?: InteractiveElementSnapshot): BrowserSkillTarget | undefined {
+  if (!element || element.sensitive) return undefined;
+  let hrefPath: string | undefined;
+  if (element.href) {
+    try {
+      const parsed = new URL(element.href);
+      hrefPath = parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.pathname.slice(0, 500) : undefined;
+    } catch {
+      hrefPath = undefined;
+    }
+  }
+  const target: BrowserSkillTarget = {
+    tag: cleanLocatorText(element.tag, 40),
+    role: cleanLocatorText(element.role, 80),
+    name: cleanLocatorText(element.name),
+    text: cleanLocatorText(element.text),
+    type: cleanLocatorText(element.type, 40),
+    placeholder: cleanLocatorText(element.placeholder),
+    hrefPath,
+  };
+  return Object.values(target).some(Boolean) ? target : undefined;
+}
+
+function browserSkillTargetForParams(params: Record<string, unknown>): BrowserSkillTarget | undefined {
+  const tabId = typeof params.tabId === "string" && browserTabs.has(params.tabId) ? params.tabId : activeTabId;
+  const ref = typeof params.ref === "string" ? params.ref : undefined;
+  if (!tabId || !ref) return undefined;
+  return browserSkillTargetFromElement(latestSnapshots.get(tabId)?.elements.find((element) => element.ref === ref));
+}
+
+function skillInputPlaceholder(seed: string): string {
+  const name = `input_${createHash("sha256").update(seed).digest("hex").slice(0, 8)}`;
+  return `{{${name}}}`;
+}
+
+function normalizeBrowserSkillTraceParams(
+  method: string,
+  params: Record<string, unknown>,
+  target?: BrowserSkillTarget,
+): BrowserSkillTraceParams {
+  const normalized: Record<string, unknown> = {};
+  const inputLabels: Record<string, string> = {};
+  if (method === "browser.navigate" || method === "browser.tab_new") {
+    const raw = String(params.url || "").trim();
+    try {
+      const parsed = new URL(raw);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("unsupported");
+      if (parsed.search || parsed.hash) {
+        const placeholder = skillInputPlaceholder(`navigate:${raw}`);
+        normalized.url = placeholder;
+        inputLabels[placeholder.slice(2, -2)] = "目标网址";
+      } else {
+        normalized.url = `${parsed.origin}${parsed.pathname}`;
+      }
+    } catch {
+      const placeholder = skillInputPlaceholder(`navigate:${raw}`);
+      normalized.url = placeholder;
+      inputLabels[placeholder.slice(2, -2)] = "网址或搜索内容";
+    }
+    if (method === "browser.tab_new" && typeof params.activate === "boolean") normalized.activate = params.activate;
+  } else if (method === "browser.act") {
+    const action = String(params.action || "");
+    normalized.action = action;
+    if (typeof params.key === "string") normalized.key = params.key.slice(0, 40);
+    if (typeof params.deltaX === "number") normalized.deltaX = params.deltaX;
+    if (typeof params.deltaY === "number") normalized.deltaY = params.deltaY;
+    if (action === "fill" && typeof params.text === "string") {
+      const placeholder = skillInputPlaceholder(`fill:${target?.role || ""}:${target?.name || target?.placeholder || "field"}`);
+      normalized.text = placeholder;
+      inputLabels[placeholder.slice(2, -2)] = target?.name || target?.placeholder || "填写内容";
+    }
+    if (action === "select" && typeof params.value === "string") {
+      const placeholder = skillInputPlaceholder(`select:${target?.role || ""}:${target?.name || "option"}`);
+      normalized.value = placeholder;
+      inputLabels[placeholder.slice(2, -2)] = target?.name || "选择值";
+    }
+  } else if (method === "browser.wait") {
+    normalized.condition = String(params.condition || "idle");
+    if (params.value != null) normalized.value = cleanLocatorText(sanitizeTextForExposure(String(params.value)), 500);
+    if (typeof params.timeoutMs === "number") normalized.timeoutMs = Math.min(Math.max(params.timeoutMs, 100), 20_000);
+  }
+  return { params: normalized, inputLabels };
+}
+
+function browserSkillRiskForCommand(
+  method: string,
+  params: Record<string, unknown>,
+  target?: BrowserSkillTarget,
+): BrowserSkillRisk {
+  if (method !== "browser.act") return "read_only";
+  const action = String(params.action || "");
+  if (["hover", "focus", "scroll"].includes(action)) return "read_only";
+  const identity = `${target?.role || ""} ${target?.name || ""} ${target?.text || ""}`.toLowerCase();
+  if ((action === "press" && String(params.key || "").toLowerCase() === "enter")
+    || /\b(?:submit|send|delete|remove|purchase|buy|checkout|publish|upload|confirm|save)\b|提交|发送|删除|购买|结算|发布|上传|确认|保存/.test(identity)) {
+    return "confirmation";
+  }
+  return "interaction";
+}
+
+function currentBrowserSkillPage(tabId?: string): { url: string; title: string } {
+  const record = browserTabs.get(tabId || activeTabId);
+  if (!record || record.view.webContents.isDestroyed()) {
+    return { url: sanitizeUrlForExposure(state.url), title: cleanLocatorText(state.title, 300) || "" };
+  }
+  return {
+    url: sanitizeUrlForExposure(record.view.webContents.getURL()),
+    title: cleanLocatorText(record.view.webContents.getTitle(), 300) || "",
+  };
+}
+
+function normalizedMatchText(value: string | undefined): string {
+  return (value || "").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+}
+
+function scoreBrowserSkillTarget(target: BrowserSkillTarget, element: InteractiveElementSnapshot): number {
+  if (element.sensitive || element.disabled) return -1;
+  let score = 0;
+  const exact = (left?: string, right?: string) => normalizedMatchText(left) === normalizedMatchText(right);
+  const includes = (left?: string, right?: string) => {
+    const a = normalizedMatchText(left);
+    const b = normalizedMatchText(right);
+    return Boolean(a && b && (a.includes(b) || b.includes(a)));
+  };
+  if (target.tag && exact(target.tag, element.tag)) score += 2;
+  if (target.role && exact(target.role, element.role)) score += 4;
+  if (target.type && exact(target.type, element.type)) score += 2;
+  if (target.name) score += exact(target.name, element.name) ? 9 : includes(target.name, element.name) ? 4 : 0;
+  if (target.placeholder) score += exact(target.placeholder, element.placeholder) ? 6 : includes(target.placeholder, element.placeholder) ? 2 : 0;
+  if (target.text) score += exact(target.text, element.text) ? 5 : includes(target.text, element.text) ? 2 : 0;
+  if (target.hrefPath && element.href) {
+    try {
+      if (new URL(element.href).pathname === target.hrefPath) score += 5;
+    } catch {
+      // Ignore malformed page links.
+    }
+  }
+  return score;
+}
+
+function resolveBrowserSkillElement(
+  snapshot: InteractivePageSnapshot,
+  target: BrowserSkillTarget,
+): InteractiveElementSnapshot {
+  const ranked = snapshot.elements
+    .map((element) => ({ element, score: scoreBrowserSkillTarget(target, element) }))
+    .filter((candidate) => candidate.score >= 0)
+    .sort((left, right) => right.score - left.score);
+  const best = ranked[0];
+  const second = ranked[1];
+  if (!best || best.score < 6) throw new Error("SKILL_PAGE_DRIFT: No page element matched the learned semantic target.");
+  if (second && second.score === best.score) throw new Error("SKILL_PAGE_DRIFT: The learned semantic target matched multiple page elements.");
+  return best.element;
+}
+
+function renderBrowserSkillValue(value: unknown, inputs: Record<string, string | number | boolean>): unknown {
+  if (typeof value === "string") {
+    const exact = value.match(/^\{\{([a-z0-9_]+)\}\}$/i);
+    if (exact) {
+      if (!(exact[1] in inputs)) throw new Error(`Missing browser skill input: ${exact[1]}`);
+      return inputs[exact[1]];
+    }
+    return value.replace(/\{\{([a-z0-9_]+)\}\}/gi, (_match, name: string) => {
+      if (!(name in inputs)) throw new Error(`Missing browser skill input: ${name}`);
+      return String(inputs[name]);
+    });
+  }
+  if (Array.isArray(value)) return value.map((item) => renderBrowserSkillValue(item, inputs));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, renderBrowserSkillValue(item, inputs)]));
+  }
+  return value;
+}
+
+async function recordBrowserSkillCommand(
+  request: PipeRequest,
+  before: { url: string; title: string },
+  target: BrowserSkillTarget | undefined,
+  startedAt: number,
+  outcome: "success" | "error" | "cancelled",
+  detail?: string,
+): Promise<void> {
+  if (!browserSkillService || !request.clientSessionId || !isTraceableBrowserSkillMethod(request.method)) return;
+  const rawParams = request.params || {};
+  const normalized = normalizeBrowserSkillTraceParams(request.method, rawParams, target);
+  const input: BrowserSkillTraceOperationInput = {
+    method: request.method,
+    label: browserSkillCommandLabels[request.method],
+    params: normalized.params,
+    inputLabels: normalized.inputLabels,
+    target,
+    risk: browserSkillRiskForCommand(request.method, rawParams, target),
+    before,
+    after: currentBrowserSkillPage(typeof rawParams.tabId === "string" ? rawParams.tabId : undefined),
+    outcome,
+    detail: sanitizeTextForExposure(detail),
+    durationMs: Date.now() - startedAt,
+    sanitized: true,
+  };
+  try {
+    await browserSkillService.recordOperation(request.clientSessionId, input);
+    await refreshBrowserSkillState();
+    mainWindow?.webContents.send("browser:state", desktopState());
+  } catch (error) {
+    logRuntime(`Failed to record browser skill operation ${request.method}`, error);
+  }
+}
+
+async function executeBrowserSkill(
+  skillId: string,
+  providedInputs: Record<string, string | number | boolean> = {},
+  userConfirmed = false,
+): Promise<BrowserSkillRun> {
+  if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+  if (state.browserSkillRun?.status === "running") throw new Error("Another browser skill is already running.");
+  const skill = await browserSkillService.getSkill(skillId);
+  if (!skill) throw new Error(`Browser skill not found: ${skillId}`);
+  if (skill.status !== "enabled") throw new Error("Only enabled browser skills can run.");
+  if (skill.risk === "confirmation" && !userConfirmed) {
+    const error = new Error("This browser skill contains confirmation-risk actions and requires explicit user confirmation for this run.");
+    error.name = "USER_CONFIRMATION_REQUIRED";
+    throw error;
+  }
+  const inputs: Record<string, string | number | boolean> = {};
+  for (const definition of skill.inputs) {
+    if (definition.sensitive) throw new Error("Sensitive browser skill inputs must be completed manually by the user.");
+    const value = providedInputs[definition.name] ?? definition.defaultValue;
+    if (value === undefined) {
+      if (definition.required) throw new Error(`Missing browser skill input: ${definition.label}`);
+      continue;
+    }
+    if (definition.type === "boolean" && typeof value !== "boolean") throw new Error(`${definition.label} must be a boolean.`);
+    if (definition.type === "number" && typeof value !== "number") throw new Error(`${definition.label} must be a number.`);
+    if (["text", "url"].includes(definition.type) && typeof value !== "string") throw new Error(`${definition.label} must be text.`);
+    inputs[definition.name] = value;
+  }
+
+  const run: BrowserSkillRun = {
+    id: randomUUID(),
+    skillId: skill.id,
+    skillName: skill.name,
+    status: "running",
+    currentStep: 0,
+    totalSteps: skill.steps.length,
+    detail: "准备执行",
+    startedAt: new Date().toISOString(),
+  };
+  state.browserSkillRun = run;
+  broadcastState(false);
+  const startedAt = Date.now();
+  const generation = operationGeneration;
+  let lastDetail = "";
+  try {
+    for (let index = 0; index < skill.steps.length; index += 1) {
+      assertOperationCurrent(generation);
+      const step = skill.steps[index];
+      if (!isLearnableBrowserSkillMethod(step.method)) throw new Error(`Browser skill method is not runnable: ${step.method}`);
+      if (step.risk === "confirmation" && !userConfirmed) {
+        const error = new Error(`Step ${index + 1} requires explicit user confirmation.`);
+        error.name = "USER_CONFIRMATION_REQUIRED";
+        throw error;
+      }
+      run.currentStep = index + 1;
+      run.detail = step.label;
+      setRuntime("running", `技能：${skill.name} · ${step.label}`);
+      state.browserSkillRun = { ...run };
+      broadcastState(false);
+      const rendered = renderBrowserSkillValue(step.params, inputs) as Record<string, unknown>;
+      if (["browser.navigate", "browser.wait", "browser.back", "browser.forward", "browser.reload"].includes(step.method)) {
+        rendered.tabId = activeTabId;
+      }
+      if (step.method === "browser.act") {
+        const action = String(rendered.action || "");
+        if (step.target) {
+          const snapshot = await captureInteractiveSnapshot(requireBrowserView(activeTabId).webContents, 300, 24_000);
+          snapshotRevisions.set(activeTabId, snapshot.revision);
+          latestSnapshots.set(activeTabId, snapshot);
+          const element = resolveBrowserSkillElement(snapshot, step.target);
+          rendered.ref = element.ref;
+          rendered.revision = snapshot.revision;
+        } else if (!["press", "scroll"].includes(action)) {
+          throw new Error(`SKILL_PAGE_DRIFT: Step ${index + 1} has no semantic target.`);
+        }
+        rendered.tabId = activeTabId;
+      }
+      try {
+        await handleCommand(step.method, rendered, { recordSkillTrace: false });
+        lastDetail = step.label;
+      } catch (error) {
+        if (!step.continueOnFailure) throw error;
+        lastDetail = `${step.label}（已跳过：${sanitizeTextForExposure((error as Error).message) || "失败"}）`;
+      }
+    }
+    run.status = "done";
+    run.detail = lastDetail ? `已完成：${lastDetail}` : "技能已完成";
+    run.completedAt = new Date().toISOString();
+    await browserSkillService.recordRunResult(skill.id, true, Date.now() - startedAt);
+    await refreshBrowserSkillState();
+    finishRuntime(`技能“${skill.name}”已完成`);
+    state.browserSkillRun = { ...run };
+    broadcastState(false);
+    return { ...run };
+  } catch (error) {
+    const stopped = (error as Error).name === "TASK_STOPPED";
+    run.status = stopped ? "cancelled" : "error";
+    run.detail = sanitizeTextForExposure((error as Error).message) || "技能执行失败";
+    run.completedAt = new Date().toISOString();
+    const updated = await browserSkillService.recordRunResult(skill.id, false, Date.now() - startedAt).catch(() => null);
+    if (updated && updated.stats.failureCount >= 3 && updated.stats.failureCount > updated.stats.successCount) {
+      await browserSkillService.setStatus(skill.id, "stale").catch(() => undefined);
+    }
+    await refreshBrowserSkillState();
+    state.browserSkillRun = { ...run };
+    if (!stopped) setRuntime("error", `技能“${skill.name}”执行失败`);
+    else broadcastState(false);
+    throw error;
+  }
+}
+
+async function handleCommand(
+  method: string,
+  params: Record<string, unknown> = {},
+  context: BrowserCommandContext = {},
+): Promise<unknown> {
   switch (method) {
     case "browser.capabilities":
       return {
@@ -2235,6 +2652,9 @@ async function handleCommand(method: string, params: Record<string, unknown> = {
           "document-search",
           "human-takeover",
           "human-assistance-broker",
+          "browser-skill-learning",
+          "browser-skill-library",
+          "guarded-workflow-execution",
         ],
       };
     case "browser.status":
@@ -2277,6 +2697,7 @@ async function handleCommand(method: string, params: Record<string, unknown> = {
         Number(params.maxTextCharacters ?? 24_000),
       );
       snapshotRevisions.set(tabId, snapshot.revision);
+      latestSnapshots.set(tabId, snapshot);
       createTask("生成页面快照", `${snapshot.elements.length} 个可交互元素`, "done");
       return {
         ...snapshot,
@@ -2497,6 +2918,74 @@ async function handleCommand(method: string, params: Record<string, unknown> = {
       mainWindow?.flashFrame(false);
       setRuntime("idle", "任务已停止");
       return { ok: true };
+    case "browser_skill.list": {
+      if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+      const includeDrafts = params.includeDrafts === true;
+      const skills = (await browserSkillService.listSkills(true))
+        .filter((skill) => includeDrafts || skill.status === "enabled")
+        .map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          status: skill.status,
+          risk: skill.risk,
+          trigger: skill.trigger,
+          inputs: skill.inputs,
+          stepCount: skill.steps.length,
+          stats: skill.stats,
+          updatedAt: skill.updatedAt,
+        }));
+      return { skills };
+    }
+    case "browser_skill.match": {
+      if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+      const matches = await browserSkillService.matchSkills(
+        String(params.query || ""),
+        String(params.url || state.url || ""),
+        Number(params.limit || 10),
+      );
+      return {
+        matches: matches.map(({ skill, score, reasons }) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          risk: skill.risk,
+          inputs: skill.inputs,
+          stepCount: skill.steps.length,
+          stats: skill.stats,
+          score,
+          reasons,
+        })),
+      };
+    }
+    case "browser_skill.run": {
+      const rawInputs = params.inputs && typeof params.inputs === "object" && !Array.isArray(params.inputs)
+        ? params.inputs as Record<string, string | number | boolean>
+        : {};
+      return executeBrowserSkill(String(params.skillId || ""), rawInputs, params.userConfirmed === true);
+    }
+    case "browser_skill.learn": {
+      if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+      if (!context.clientSessionId) throw new Error("A browser MCP task session is required to learn a workflow.");
+      const result = await browserSkillService.finalizeTrace(context.clientSessionId, {
+        name: typeof params.name === "string" ? params.name : undefined,
+        description: typeof params.description === "string" ? params.description : undefined,
+      });
+      await refreshBrowserSkillState();
+      broadcastState(false);
+      return result;
+    }
+    case "browser_skill.feedback": {
+      if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+      const skill = await browserSkillService.recordRunResult(
+        String(params.skillId || ""),
+        params.outcome === "success",
+        Number(params.durationMs || 0),
+      );
+      await refreshBrowserSkillState();
+      broadcastState(false);
+      return { skillId: skill.id, stats: skill.stats };
+    }
     case "session.check":
       return checkSessionHealth(resolveTabId(params.tabId));
     case "auth.complete":
@@ -2608,11 +3097,28 @@ async function handleCommand(method: string, params: Record<string, unknown> = {
 }
 
 async function handlePipeRequest(request: PipeRequest): Promise<PipeResponse> {
+  const before = currentBrowserSkillPage(
+    typeof request.params?.tabId === "string" ? request.params.tabId : undefined,
+  );
+  const target = browserSkillTargetForParams(request.params || {});
+  const startedAt = Date.now();
   try {
-    const result = await handleCommand(request.method, request.params);
+    const result = await handleCommand(request.method, request.params, {
+      clientSessionId: request.clientSessionId,
+      recordSkillTrace: true,
+    });
+    await recordBrowserSkillCommand(request, before, target, startedAt, "success");
     return { id: request.id, ok: true, result };
   } catch (error) {
     const typed = error as Error;
+    await recordBrowserSkillCommand(
+      request,
+      before,
+      target,
+      startedAt,
+      typed.name === "TASK_STOPPED" ? "cancelled" : "error",
+      typed.message,
+    );
     return {
       id: request.id,
       ok: false,
@@ -2633,6 +3139,8 @@ function enqueuePipeRequest(request: PipeRequest): Promise<PipeResponse> {
     "browser.stop",
     "browser.dialogs",
     "browser.dialog_respond",
+    "browser_skill.list",
+    "browser_skill.match",
   ].includes(request.method)) {
     return handlePipeRequest(request);
   }
@@ -2849,11 +3357,83 @@ function setupIpc(): void {
     const error = await shell.openPath(filePath);
     if (error) throw new Error(error);
   });
+  ipcMain.handle("browser-skill:save", async (_event, skill: BrowserSkill) => {
+    if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+    const saved = await browserSkillService.saveSkill(skill);
+    await refreshBrowserSkillState();
+    broadcastState(false);
+    return saved;
+  });
+  ipcMain.handle("browser-skill:set-status", async (_event, skillId: string, status: BrowserSkillStatus) => {
+    if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+    const saved = await browserSkillService.setStatus(skillId, status);
+    await refreshBrowserSkillState();
+    broadcastState(false);
+    return saved;
+  });
+  ipcMain.handle("browser-skill:delete", async (_event, skillId: string) => {
+    if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+    if (state.browserSkillRun?.status === "running" && state.browserSkillRun.skillId === skillId) {
+      throw new Error("A running browser skill cannot be deleted.");
+    }
+    await browserSkillService.deleteSkill(skillId);
+    await refreshBrowserSkillState();
+    broadcastState(false);
+  });
+  ipcMain.handle("browser-skill:import", async () => {
+    if (!mainWindow || !browserSkillService) return null;
+    const selection = await dialog.showOpenDialog(mainWindow, {
+      title: "导入浏览器技能",
+      properties: ["openFile"],
+      filters: [
+        { name: "Codex Browser Skill", extensions: ["cbskill", "json"] },
+        { name: "JSON", extensions: ["json"] },
+      ],
+    });
+    if (selection.canceled || !selection.filePaths[0]) return null;
+    const imported = await browserSkillService.importSkill(selection.filePaths[0]);
+    await refreshBrowserSkillState();
+    broadcastState(false);
+    return imported;
+  });
+  ipcMain.handle("browser-skill:export", async (_event, skillId: string) => {
+    if (!mainWindow || !browserSkillService) return false;
+    const skill = await browserSkillService.getSkill(skillId);
+    if (!skill) throw new Error(`Browser skill not found: ${skillId}`);
+    const safeName = skill.name.replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "-").replace(/[. ]+$/g, "").slice(0, 80) || "browser-skill";
+    const selection = await dialog.showSaveDialog(mainWindow, {
+      title: "导出浏览器技能",
+      defaultPath: `${safeName}.cbskill`,
+      filters: [{ name: "Codex Browser Skill", extensions: ["cbskill"] }],
+    });
+    if (selection.canceled || !selection.filePath) return false;
+    await browserSkillService.exportSkill(skillId, selection.filePath);
+    return true;
+  });
+  ipcMain.handle("browser-skill:create-from-trace", async (_event, traceId: string) => {
+    if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+    const skill = await browserSkillService.createSkillFromTrace(traceId);
+    await refreshBrowserSkillState();
+    broadcastState(false);
+    return skill;
+  });
+  ipcMain.handle("browser-skill:discard-trace", async (_event, traceId: string) => {
+    if (!browserSkillService) throw new Error("Browser skill service is not ready.");
+    await browserSkillService.discardTrace(traceId);
+    await refreshBrowserSkillState();
+    broadcastState(false);
+  });
+  ipcMain.handle(
+    "browser-skill:run",
+    (_event, skillId: string, inputs?: Record<string, string | number | boolean>, userConfirmed?: boolean) => (
+      executeBrowserSkill(skillId, inputs || {}, userConfirmed === true)
+    ),
+  );
 }
 
 function createTray(): void {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="7" fill="#12634a"/><path d="M9 8h14v3H12v10h11v3H9z" fill="white"/><path d="M15 13h8v3h-8zm0 5h6v3h-6z" fill="#b7e3d2"/></svg>`;
-  const icon = nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+  const icon = nativeImage.createFromPath(brandingPath("tray.png"));
+  if (icon.isEmpty()) throw new Error("Codex Browser tray icon could not be loaded.");
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
   tray.setToolTip("Codex Browser");
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -2940,11 +3520,15 @@ async function restoreRuntimeState(): Promise<void> {
 async function createApplication(): Promise<void> {
   logRuntime("Creating desktop application");
   Menu.setApplicationMenu(null);
-  app.setAppUserModelId("local.codex.browser");
+  app.setAppUserModelId(APP_ID);
   const libraryDir = path.join(app.getPath("userData"), "library");
   downloadsDir = path.join(libraryDir, "downloads");
   persistenceService = new PersistenceService(path.join(app.getPath("userData"), "state"));
   await persistenceService.initialize();
+  browserSkillService = new BrowserSkillService(app.getPath("userData"));
+  await browserSkillService.initialize();
+  await refreshBrowserSkillState();
+  logRuntime(`Browser skill library initialized with ${state.browserSkills.length} skill(s)`);
   const savedCredentialCount = await persistenceService.loadLoginCredentials();
   refreshCredentialVaultStatus();
   logRuntime(`Loaded ${savedCredentialCount} encrypted login credential site(s)`);
@@ -2965,6 +3549,7 @@ async function createApplication(): Promise<void> {
     show: false,
     backgroundColor: "#f2f4f3",
     title: "Codex Browser",
+    icon: brandingPath("icon.ico"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       backgroundThrottling: false,

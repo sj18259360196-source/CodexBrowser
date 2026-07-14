@@ -7,8 +7,8 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-const projectRoot = "A:\\Project\\CodexBrowser";
-const launcher = "C:\\Users\\22865\\plugins\\codex-browser\\scripts\\launch-mcp.mjs";
+const projectRoot = path.resolve(import.meta.dirname, "..");
+const mcpServerPath = path.join(projectRoot, "dist", "mcp", "index.mjs");
 const fixtureRoot = path.join(projectRoot, "src", "renderer");
 const pdfFixturePath = path.join(projectRoot, "output", "test-fixtures", "dummy.pdf");
 const runtimeRoot = path.resolve(projectRoot, ".runtime");
@@ -189,7 +189,7 @@ const fixtureUrl = `http://127.0.0.1:${address.port}/control-test.html`;
 const pdfFixtureUrl = `http://127.0.0.1:${address.port}/visible.pdf`;
 
 const client = new Client({ name: "codex-browser-advanced-smoke", version: "0.1.0" });
-const transport = new StdioClientTransport({ command: "node", args: [launcher], env });
+const transport = new StdioClientTransport({ command: "node", args: [mcpServerPath], env });
 const electronExecutable = process.platform === "win32"
   ? path.join(projectRoot, "node_modules", "electron", "dist", "electron.exe")
   : path.join(projectRoot, "node_modules", ".bin", "electron");

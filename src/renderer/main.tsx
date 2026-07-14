@@ -1,55 +1,73 @@
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import appIconUrl from "./assets/app-icon.png";
 import {
   Activity,
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  BrainCircuit,
   Check,
   CheckCircle2,
+  ChevronRight,
   Circle,
+  Clock3,
   Cookie,
   Download,
   ExternalLink,
+  FileInput,
+  FileOutput,
   FileSearch,
   FileText,
   FolderOpen,
   Globe2,
   HardDrive,
+  History,
   Home,
   KeyRound,
+  Layers3,
   LoaderCircle,
   MessageSquareText,
   Pause,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
+  Save,
   Search,
+  Settings2,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   Square,
   Trash2,
   Upload,
   UserRoundCheck,
   X,
 } from "lucide-react";
-import type {
-  AppState,
-  BrowserDialogPrompt,
-  BrowserTabSummary,
-  DesktopBridge,
-  DownloadItem,
-  RuntimeStatus,
-  SessionHealthStatus,
-  TaskItem,
+import {
+  BROWSER_PROTOCOL_VERSION,
+  type AppState,
+  type BrowserSkill,
+  type BrowserSkillRisk,
+  type BrowserSkillRunStatus,
+  type BrowserSkillStatus,
+  type BrowserSkillTraceStatus,
+  type BrowserDialogPrompt,
+  type BrowserTabSummary,
+  type DesktopBridge,
+  type DownloadItem,
+  type RuntimeStatus,
+  type SessionHealthStatus,
+  type TaskItem,
 } from "../shared/contracts";
 import "./styles.css";
 
 const now = new Date().toISOString();
 
 const desktopLoadingState: AppState = {
-  protocolVersion: "1.2.0",
+  protocolVersion: BROWSER_PROTOCOL_VERSION,
   runtimeStatus: "idle",
   currentAction: "正在连接桌面浏览器",
   url: "",
@@ -80,14 +98,19 @@ const desktopLoadingState: AppState = {
     taskCount: 0,
     downloadCount: 0,
     documentCount: 0,
+    browserSkillCount: 0,
+    browserSkillTraceCount: 0,
   },
   tasks: [],
   downloads: [],
   documents: [],
+  browserSkills: [],
+  browserSkillTraces: [],
+  browserSkillRun: null,
 };
 
 const previewState: AppState = {
-  protocolVersion: "1.2.0",
+  protocolVersion: BROWSER_PROTOCOL_VERSION,
   runtimeStatus: "waiting_user",
   currentAction: "等待高校登录授权",
   url: "https://access.example.edu/login",
@@ -153,6 +176,8 @@ const previewState: AppState = {
     taskCount: 4,
     downloadCount: 2,
     documentCount: 2,
+    browserSkillCount: 2,
+    browserSkillTraceCount: 2,
   },
   tasks: [
     task("等待高校授权", "ScienceDirect · Deep learning for scientific discovery", "waiting_user", 0),
@@ -202,6 +227,102 @@ const previewState: AppState = {
       createdAt: new Date(Date.now() - 22 * 60_000).toISOString(),
     },
   ],
+  browserSkills: [
+    {
+      schemaVersion: 1,
+      id: "preview-search-skill",
+      name: "站内搜索并打开首个结果",
+      description: "在支持搜索的网站填写关键词，提交检索并打开第一个匹配结果。",
+      status: "enabled",
+      risk: "confirmation",
+      trigger: {
+        hosts: ["portal.example.com"],
+        pathPatterns: ["/search*", "/catalog*"],
+        keywords: ["搜索", "查找", "打开结果"],
+      },
+      inputs: [
+        { name: "query", label: "搜索内容", type: "text", required: true, sensitive: false, defaultValue: "browser automation" },
+      ],
+      steps: [
+        { id: "search-fill", label: "填写搜索内容", method: "browser.act", params: { action: "fill", text: "{{query}}" }, target: { role: "searchbox", name: "搜索" }, risk: "interaction" },
+        { id: "search-submit", label: "提交搜索", method: "browser.act", params: { action: "press", key: "Enter" }, target: { role: "searchbox", name: "搜索" }, risk: "confirmation" },
+        { id: "search-open", label: "打开首个结果", method: "browser.act", params: { action: "click" }, target: { role: "link", name: "第一个搜索结果" }, risk: "interaction" },
+      ],
+      stats: { runCount: 12, successCount: 11, failureCount: 1, averageDurationMs: 4_800, lastRunAt: now, lastSuccessAt: now },
+      source: "learned",
+      version: 3,
+      createdAt: new Date(Date.now() - 12 * 24 * 60 * 60_000).toISOString(),
+      updatedAt: now,
+    },
+    {
+      schemaVersion: 1,
+      id: "preview-support-skill",
+      name: "填写并提交支持请求",
+      description: "按主题和说明填写网站支持表单，在最终提交前要求用户确认。",
+      status: "draft",
+      risk: "confirmation",
+      trigger: {
+        hosts: ["support.example.com"],
+        pathPatterns: ["/requests/new"],
+        keywords: ["支持请求", "提交工单"],
+      },
+      inputs: [
+        { name: "subject", label: "主题", type: "text", required: true, sensitive: false },
+        { name: "detail", label: "问题说明", type: "text", required: true, sensitive: false },
+      ],
+      steps: [
+        { id: "support-subject", label: "填写主题", method: "browser.act", params: { action: "fill", text: "{{subject}}" }, target: { role: "textbox", name: "主题" }, risk: "interaction" },
+        { id: "support-detail", label: "填写问题说明", method: "browser.act", params: { action: "fill", text: "{{detail}}" }, target: { role: "textbox", name: "问题说明" }, risk: "interaction" },
+        { id: "support-submit", label: "提交支持请求", method: "browser.act", params: { action: "click" }, target: { role: "button", name: "提交" }, risk: "confirmation" },
+      ],
+      stats: { runCount: 0, successCount: 0, failureCount: 0, averageDurationMs: 0 },
+      source: "learned",
+      sourceTraceId: "preview-support-trace",
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ],
+  browserSkillTraces: [
+    {
+      id: "preview-recording-trace",
+      title: "整理后台待处理项目",
+      host: "workspace.example.com",
+      status: "recording",
+      operationCount: 3,
+      startedAt: new Date(Date.now() - 4 * 60_000).toISOString(),
+      updatedAt: new Date(Date.now() - 30_000).toISOString(),
+    },
+    {
+      id: "preview-export-trace",
+      title: "筛选后台列表并导出当前结果",
+      host: "admin.example.com",
+      status: "ready",
+      operationCount: 7,
+      startedAt: new Date(Date.now() - 18 * 60_000).toISOString(),
+      updatedAt: new Date(Date.now() - 12 * 60_000).toISOString(),
+    },
+    {
+      id: "preview-support-trace",
+      title: "填写网站支持请求",
+      host: "support.example.com",
+      status: "learned",
+      operationCount: 5,
+      startedAt: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
+      updatedAt: new Date(Date.now() - 90 * 60_000).toISOString(),
+      draftSkillId: "preview-support-skill",
+    },
+  ],
+  browserSkillRun: {
+    id: "preview-run",
+    skillId: "preview-search-skill",
+    skillName: "站内搜索并打开首个结果",
+    status: "running",
+    currentStep: 2,
+    totalSteps: 3,
+    detail: "正在等待搜索结果页面稳定",
+    startedAt: now,
+  },
 };
 
 function previewTab(
@@ -276,6 +397,55 @@ function formatSavedAt(value?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "保存时间未知";
   return `已保存 ${date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function skillStatusLabel(status: BrowserSkillStatus): string {
+  if (status === "enabled") return "已启用";
+  if (status === "disabled") return "已停用";
+  if (status === "stale") return "需复核";
+  return "草稿";
+}
+
+function skillRiskLabel(risk: BrowserSkillRisk): string {
+  if (risk === "read_only") return "只读";
+  if (risk === "confirmation") return "运行前确认";
+  return "普通交互";
+}
+
+function traceStatusLabel(status: BrowserSkillTraceStatus): string {
+  if (status === "recording") return "记录中";
+  if (status === "learned") return "已生成技能";
+  if (status === "discarded") return "已忽略";
+  return "待学习";
+}
+
+function skillRunStatusLabel(status: BrowserSkillRunStatus): string {
+  if (status === "running") return "运行中";
+  if (status === "done") return "已完成";
+  if (status === "cancelled") return "已取消";
+  return "失败";
+}
+
+function formatDuration(durationMs: number): string {
+  if (durationMs <= 0) return "尚无数据";
+  if (durationMs < 1_000) return `${Math.round(durationMs)} 毫秒`;
+  if (durationMs < 60_000) return `${(durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0)} 秒`;
+  return `${Math.round(durationMs / 60_000)} 分钟`;
+}
+
+function formatRelativeTime(value?: string): string {
+  if (!value) return "尚未运行";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "时间未知";
+  const elapsedMinutes = Math.max(0, Math.round((Date.now() - timestamp) / 60_000));
+  if (elapsedMinutes < 1) return "刚刚";
+  if (elapsedMinutes < 60) return `${elapsedMinutes} 分钟前`;
+  if (elapsedMinutes < 24 * 60) return `${Math.round(elapsedMinutes / 60)} 小时前`;
+  return new Date(timestamp).toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+}
+
+function parseList(value: string): string[] {
+  return value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean);
 }
 
 function newestByCreatedAt<T extends { createdAt: string }>(items: T[]): T | undefined {
@@ -429,6 +599,268 @@ function MockBrowserPage() {
   );
 }
 
+type BrowserSkillDrawerTab = "skills" | "learning" | "runs";
+
+function BrowserSkillDrawer({
+  skills,
+  traces,
+  currentRun,
+  busy,
+  notice,
+  onClose,
+  onImport,
+  onSave,
+  onStatus,
+  onDelete,
+  onExport,
+  onLearnTrace,
+  onDiscardTrace,
+  onRun,
+}: {
+  skills: BrowserSkill[];
+  traces: AppState["browserSkillTraces"];
+  currentRun: AppState["browserSkillRun"];
+  busy: boolean;
+  notice: string | null;
+  onClose: () => void;
+  onImport: () => void;
+  onSave: (skill: BrowserSkill) => void;
+  onStatus: (skill: BrowserSkill, status: BrowserSkillStatus) => void;
+  onDelete: (skill: BrowserSkill) => void;
+  onExport: (skill: BrowserSkill) => void;
+  onLearnTrace: (traceId: string) => void;
+  onDiscardTrace: (traceId: string) => void;
+  onRun: (skill: BrowserSkill, inputs: Record<string, string | number | boolean>, confirmed: boolean) => void;
+}) {
+  const [tab, setTab] = useState<BrowserSkillDrawerTab>("skills");
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(skills[0]?.id ?? null);
+  const [editing, setEditing] = useState<BrowserSkill | null>(null);
+  const [runInputs, setRunInputs] = useState<Record<string, string | number | boolean>>({});
+  const [runConfirmed, setRunConfirmed] = useState(false);
+  const selectedSkill = skills.find((skill) => skill.id === selectedSkillId) ?? skills[0] ?? null;
+
+  useEffect(() => {
+    if (!selectedSkill && skills[0]) setSelectedSkillId(skills[0].id);
+    if (selectedSkillId && !skills.some((skill) => skill.id === selectedSkillId)) {
+      setSelectedSkillId(skills[0]?.id ?? null);
+    }
+  }, [selectedSkill, selectedSkillId, skills]);
+
+  useEffect(() => {
+    if (!selectedSkill) {
+      setRunInputs({});
+      return;
+    }
+    setRunInputs(Object.fromEntries(selectedSkill.inputs.map((input) => [
+      input.name,
+      input.defaultValue ?? (input.type === "boolean" ? false : ""),
+    ])));
+    setRunConfirmed(false);
+    setEditing(null);
+  }, [selectedSkill?.id]);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  const requiredInputsMissing = selectedSkill?.inputs.some((input) => {
+    if (!input.required) return false;
+    const value = runInputs[input.name];
+    return input.type === "boolean" ? value === undefined : String(value ?? "").trim().length === 0;
+  }) ?? false;
+  const runNeedsConfirmation = selectedSkill?.risk === "confirmation";
+
+  const openSkill = (skillId: string) => {
+    setSelectedSkillId(skillId);
+    setTab("skills");
+  };
+
+  return (
+    <aside className="skill-drawer" aria-label="浏览器技能库">
+      <div className="skill-drawer-header">
+        <div className="skill-drawer-title">
+          <BrainCircuit size={18} />
+          <div><strong>浏览器技能</strong><span>{skills.length} 个技能 · {traces.filter((trace) => ["recording", "ready"].includes(trace.status)).length} 条待学习</span></div>
+        </div>
+        <IconButton label="关闭技能库" onClick={onClose}><X size={16} /></IconButton>
+      </div>
+
+      <div className="skill-tabs" role="tablist" aria-label="技能库视图">
+        <button type="button" role="tab" aria-selected={tab === "skills"} className={tab === "skills" ? "active" : ""} onClick={() => setTab("skills")}>
+          <Layers3 size={14} /><span>技能</span><b>{skills.length}</b>
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "learning"} className={tab === "learning" ? "active" : ""} onClick={() => setTab("learning")}>
+          <Sparkles size={14} /><span>待学习</span><b>{traces.filter((trace) => ["recording", "ready"].includes(trace.status)).length}</b>
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "runs"} className={tab === "runs" ? "active" : ""} onClick={() => setTab("runs")}>
+          <History size={14} /><span>运行</span>{currentRun?.status === "running" && <i />}
+        </button>
+      </div>
+
+      {notice && <div className="skill-notice" role="status"><CheckCircle2 size={14} /><span>{notice}</span></div>}
+
+      {tab === "skills" && (
+        <div className="skill-drawer-content">
+          <div className="skill-command-bar">
+            <strong>我的技能</strong>
+            <button type="button" className="compact-command" disabled={busy} onClick={onImport}><FileInput size={14} />导入</button>
+          </div>
+
+          <div className="skill-list" aria-label="技能列表">
+            {skills.length === 0 ? (
+              <div className="skill-empty"><BrainCircuit size={22} /><strong>还没有浏览器技能</strong><span>完成网页操作后，可从“待学习”生成技能草稿。</span></div>
+            ) : skills.map((skill) => (
+              <button
+                type="button"
+                className={`skill-list-row${skill.id === selectedSkill?.id ? " selected" : ""}`}
+                key={skill.id}
+                onClick={() => setSelectedSkillId(skill.id)}
+              >
+                <span className={`skill-state-dot ${skill.status}`} />
+                <span className="skill-list-copy"><strong>{skill.name}</strong><span>{skill.trigger.hosts[0] ?? "所有网站"} · {skill.steps.length} 步</span></span>
+                <span className={`skill-status ${skill.status}`}>{skillStatusLabel(skill.status)}</span>
+                <ChevronRight size={14} />
+              </button>
+            ))}
+          </div>
+
+          {selectedSkill && editing ? (
+            <form
+              className="skill-detail skill-editor"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onSave({ ...editing, name: editing.name.trim(), description: editing.description.trim(), updatedAt: new Date().toISOString() });
+                setEditing(null);
+              }}
+            >
+              <div className="skill-detail-heading">
+                <div><span className="section-kicker">编辑技能</span><strong>{editing.name || "未命名技能"}</strong></div>
+                <IconButton label="取消编辑" onClick={() => setEditing(null)}><X size={15} /></IconButton>
+              </div>
+              <label className="skill-field"><span>名称</span><input required maxLength={120} value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
+              <label className="skill-field"><span>说明</span><textarea rows={3} maxLength={1_000} value={editing.description} onChange={(event) => setEditing({ ...editing, description: event.target.value })} /></label>
+              <div className="skill-field-grid">
+                <label className="skill-field"><span>状态</span><select value={editing.status} onChange={(event) => setEditing({ ...editing, status: event.target.value as BrowserSkillStatus })}><option value="draft">草稿</option><option value="enabled">已启用</option><option value="disabled">已停用</option><option value="stale">需复核</option></select></label>
+                <label className="skill-field"><span>风险</span><select value={editing.risk} onChange={(event) => setEditing({ ...editing, risk: event.target.value as BrowserSkillRisk })}><option value="read_only">只读</option><option value="interaction">普通交互</option><option value="confirmation">运行前确认</option></select></label>
+              </div>
+              <label className="skill-field"><span>适用域名</span><input placeholder="example.com, app.example.com" value={editing.trigger.hosts.join(", ")} onChange={(event) => setEditing({ ...editing, trigger: { ...editing.trigger, hosts: parseList(event.target.value) } })} /></label>
+              <label className="skill-field"><span>路径模式</span><input placeholder="/search*, /items/*" value={editing.trigger.pathPatterns.join(", ")} onChange={(event) => setEditing({ ...editing, trigger: { ...editing.trigger, pathPatterns: parseList(event.target.value) } })} /></label>
+              <label className="skill-field"><span>任务关键词</span><input placeholder="搜索, 打开结果" value={editing.trigger.keywords.join(", ")} onChange={(event) => setEditing({ ...editing, trigger: { ...editing.trigger, keywords: parseList(event.target.value) } })} /></label>
+              <div className="skill-editor-note"><Settings2 size={14} /><span>{editing.steps.length} 个声明式操作步骤将保持不变。</span></div>
+              <button type="submit" className="skill-primary-command" disabled={busy || !editing.name.trim()}><Save size={15} />保存修改</button>
+            </form>
+          ) : selectedSkill ? (
+            <div className="skill-detail">
+              <div className="skill-detail-heading">
+                <div><span className="section-kicker">技能详情</span><strong>{selectedSkill.name}</strong></div>
+                <div className="skill-icon-actions">
+                  <IconButton label="编辑技能" disabled={busy} onClick={() => setEditing({ ...selectedSkill, trigger: { ...selectedSkill.trigger } })}><Pencil size={14} /></IconButton>
+                  <IconButton label="导出技能" disabled={busy} onClick={() => onExport(selectedSkill)}><FileOutput size={14} /></IconButton>
+                  <IconButton label="删除技能" danger disabled={busy} onClick={() => onDelete(selectedSkill)}><Trash2 size={14} /></IconButton>
+                </div>
+              </div>
+              <p className="skill-description">{selectedSkill.description || "没有说明。"}</p>
+              <div className="skill-summary-line">
+                <span className={`skill-status ${selectedSkill.status}`}>{skillStatusLabel(selectedSkill.status)}</span>
+                <span className={`skill-risk ${selectedSkill.risk}`}>{skillRiskLabel(selectedSkill.risk)}</span>
+                <span>v{selectedSkill.version}</span>
+                <label className="skill-toggle"><input type="checkbox" checked={selectedSkill.status === "enabled"} disabled={busy} onChange={(event) => onStatus(selectedSkill, event.target.checked ? "enabled" : "disabled")} /><span aria-hidden="true" /><b>{selectedSkill.status === "enabled" ? "启用" : "停用"}</b></label>
+              </div>
+              <section className="skill-section">
+                <h3>触发条件</h3>
+                <div className="skill-trigger-groups">
+                  <div><span>域名</span><p>{selectedSkill.trigger.hosts.join(" · ") || "不限"}</p></div>
+                  <div><span>路径</span><p>{selectedSkill.trigger.pathPatterns.join(" · ") || "不限"}</p></div>
+                  <div><span>关键词</span><p>{selectedSkill.trigger.keywords.join(" · ") || "不限"}</p></div>
+                </div>
+              </section>
+              <section className="skill-section">
+                <h3>操作步骤</h3>
+                <ol className="skill-step-list">
+                  {selectedSkill.steps.map((step) => <li key={step.id}><span>{step.label}</span><small>{step.method} · {skillRiskLabel(step.risk)}</small></li>)}
+                </ol>
+              </section>
+              <section className="skill-section skill-run-section">
+                <div className="skill-section-title"><h3>运行技能</h3><span>{selectedSkill.stats.runCount > 0 ? `${Math.round((selectedSkill.stats.successCount / selectedSkill.stats.runCount) * 100)}% 成功` : "尚未运行"}</span></div>
+                {selectedSkill.inputs.length === 0 ? <p className="skill-muted">此技能不需要输入参数。</p> : (
+                  <div className="skill-run-inputs">
+                    {selectedSkill.inputs.map((input) => input.type === "boolean" ? (
+                      <label className="skill-check-field" key={input.name}><input type="checkbox" checked={runInputs[input.name] === true} onChange={(event) => setRunInputs({ ...runInputs, [input.name]: event.target.checked })} /><span>{input.label}{input.required ? " *" : ""}</span></label>
+                    ) : (
+                      <label className="skill-field" key={input.name}><span>{input.label}{input.required ? " *" : ""}</span><input type={input.sensitive ? "password" : input.type} value={String(runInputs[input.name] ?? "")} autoComplete="off" onChange={(event) => setRunInputs({ ...runInputs, [input.name]: input.type === "number" && event.target.value !== "" ? Number(event.target.value) : event.target.value })} /></label>
+                    ))}
+                  </div>
+                )}
+                {runNeedsConfirmation && (
+                  <label className="skill-confirmation"><ShieldAlert size={16} /><input type="checkbox" checked={runConfirmed} onChange={(event) => setRunConfirmed(event.target.checked)} /><span>此技能包含会改变网页状态的操作，我确认运行。</span></label>
+                )}
+                <button type="button" className="skill-primary-command" disabled={busy || selectedSkill.status !== "enabled" || requiredInputsMissing || (runNeedsConfirmation && !runConfirmed)} onClick={() => onRun(selectedSkill, runInputs, runConfirmed)}>
+                  {busy ? <LoaderCircle className="spin" size={15} /> : <Play size={15} />}
+                  {selectedSkill.status === "enabled" ? "运行技能" : "启用后运行"}
+                </button>
+              </section>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {tab === "learning" && (
+        <div className="skill-drawer-content">
+          <div className="skill-view-heading"><div><strong>学习记录</strong><span>从完成的网页操作生成可编辑技能</span></div></div>
+          <div className="trace-list">
+            {traces.filter((trace) => trace.status !== "discarded").length === 0 ? <div className="skill-empty"><Sparkles size={22} /><strong>没有待处理记录</strong><span>浏览器会在任务中记录可复用的操作逻辑。</span></div> : traces.filter((trace) => trace.status !== "discarded").map((trace) => (
+              <div className="trace-row" key={trace.id}>
+                <div className="trace-row-main">
+                  <span className={`trace-status ${trace.status}`}>{traceStatusLabel(trace.status)}</span>
+                  <strong>{trace.title}</strong>
+                  <span>{trace.host ?? "未知网站"} · {trace.operationCount} 次操作 · {formatRelativeTime(trace.updatedAt)}</span>
+                </div>
+                <div className="trace-actions">
+                  {["recording", "ready"].includes(trace.status) && <button type="button" className="compact-command primary" disabled={busy || trace.operationCount === 0} onClick={() => onLearnTrace(trace.id)}><Sparkles size={14} />生成草稿</button>}
+                  {trace.status === "learned" && trace.draftSkillId && <button type="button" className="compact-command" onClick={() => openSkill(trace.draftSkillId!)}><ChevronRight size={14} />查看技能</button>}
+                  {trace.status !== "learned" && <IconButton label="忽略学习记录" danger disabled={busy} onClick={() => onDiscardTrace(trace.id)}><Trash2 size={14} /></IconButton>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "runs" && (
+        <div className="skill-drawer-content">
+          <div className="skill-view-heading"><div><strong>技能运行</strong><span>查看当前进度与已积累的熟练度</span></div></div>
+          {currentRun ? (
+            <section className={`current-skill-run ${currentRun.status}`}>
+              <div className="current-run-heading">
+                {currentRun.status === "running" ? <LoaderCircle className="spin" size={17} /> : currentRun.status === "done" ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+                <div><strong>{currentRun.skillName}</strong><span>{skillRunStatusLabel(currentRun.status)}</span></div>
+                <b>{currentRun.currentStep}/{currentRun.totalSteps}</b>
+              </div>
+              <div className="skill-run-progress"><span style={{ width: `${currentRun.totalSteps > 0 ? Math.min(100, (currentRun.currentStep / currentRun.totalSteps) * 100) : 0}%` }} /></div>
+              <p>{currentRun.detail}</p>
+            </section>
+          ) : <div className="skill-empty compact"><Clock3 size={20} /><strong>当前没有技能在运行</strong></div>}
+          <div className="skill-history-heading"><strong>运行统计</strong><span>按最近运行排序</span></div>
+          <div className="skill-run-history">
+            {skills.filter((skill) => skill.stats.runCount > 0).sort((a, b) => Date.parse(b.stats.lastRunAt ?? "") - Date.parse(a.stats.lastRunAt ?? "")).map((skill) => (
+              <button type="button" className="skill-run-row" key={skill.id} onClick={() => openSkill(skill.id)}>
+                <span className="run-history-icon"><History size={15} /></span>
+                <span className="run-history-copy"><strong>{skill.name}</strong><span>{skill.stats.successCount}/{skill.stats.runCount} 成功 · 平均 {formatDuration(skill.stats.averageDurationMs)}</span></span>
+                <span className="run-history-time">{formatRelativeTime(skill.stats.lastRunAt)}</span>
+                <ChevronRight size={14} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </aside>
+  );
+}
+
 function App() {
   const bridge = window.codexBrowser;
   const isPreview = !bridge;
@@ -439,6 +871,8 @@ function App() {
   const [tabBusy, setTabBusy] = useState(false);
   const [assistanceNote, setAssistanceNote] = useState("");
   const [dialogInput, setDialogInput] = useState("");
+  const [skillDrawerOpen, setSkillDrawerOpen] = useState(false);
+  const [skillNotice, setSkillNotice] = useState<string | null>(null);
   const browserSlot = useRef<HTMLDivElement>(null);
   const addressFocused = useRef(false);
 
@@ -509,7 +943,7 @@ function App() {
       observer.disconnect();
       window.removeEventListener("resize", updateBounds);
     };
-  }, [bridge, desktopReady, viewState.activeTabId]);
+  }, [bridge, desktopReady, skillDrawerOpen, viewState.activeTabId]);
 
   async function invokeDesktop<T>(
     key: string,
@@ -568,6 +1002,199 @@ function App() {
     void invokeDesktop("navigate", (desktopBridge) => desktopBridge.navigate(address));
   };
 
+  const applyBrowserSkill = (skill: BrowserSkill) => {
+    setState((current) => {
+      if (!current) return current;
+      const exists = current.browserSkills.some((item) => item.id === skill.id);
+      const browserSkills = exists
+        ? current.browserSkills.map((item) => item.id === skill.id ? skill : item)
+        : [skill, ...current.browserSkills];
+      return {
+        ...current,
+        browserSkills,
+        storage: { ...current.storage, browserSkillCount: browserSkills.length },
+      };
+    });
+  };
+
+  const removeBrowserSkill = (skillId: string) => {
+    setState((current) => {
+      if (!current) return current;
+      const browserSkills = current.browserSkills.filter((item) => item.id !== skillId);
+      return {
+        ...current,
+        browserSkills,
+        storage: { ...current.storage, browserSkillCount: browserSkills.length },
+      };
+    });
+  };
+
+  const removeBrowserSkillTrace = (traceId: string) => {
+    setState((current) => {
+      if (!current) return current;
+      const browserSkillTraces = current.browserSkillTraces.filter((trace) => trace.id !== traceId);
+      return {
+        ...current,
+        browserSkillTraces,
+        storage: { ...current.storage, browserSkillTraceCount: browserSkillTraces.length },
+      };
+    });
+  };
+
+  const saveBrowserSkill = (skill: BrowserSkill) => {
+    setSkillNotice(null);
+    if (isPreview) {
+      applyBrowserSkill(skill);
+      setSkillNotice("技能修改已保存（预览）");
+      return;
+    }
+    void invokeDesktop("skill-save", (desktopBridge) => desktopBridge.saveBrowserSkill(skill), (savedSkill) => {
+      applyBrowserSkill(savedSkill);
+      setSkillNotice("技能修改已保存");
+    });
+  };
+
+  const changeBrowserSkillStatus = (skill: BrowserSkill, status: BrowserSkillStatus) => {
+    setSkillNotice(null);
+    if (isPreview) {
+      applyBrowserSkill({ ...skill, status, updatedAt: new Date().toISOString() });
+      setSkillNotice(status === "enabled" ? "技能已启用（预览）" : "技能已停用（预览）");
+      return;
+    }
+    void invokeDesktop("skill-status", (desktopBridge) => desktopBridge.setBrowserSkillStatus(skill.id, status), (savedSkill) => {
+      applyBrowserSkill(savedSkill);
+      setSkillNotice(status === "enabled" ? "技能已启用" : "技能已停用");
+    });
+  };
+
+  const deleteBrowserSkill = (skill: BrowserSkill) => {
+    if (!window.confirm(`删除浏览器技能“${skill.name}”？此操作不会删除原始任务记录。`)) return;
+    setSkillNotice(null);
+    if (isPreview) {
+      removeBrowserSkill(skill.id);
+      setSkillNotice("技能已删除（预览）");
+      return;
+    }
+    void invokeDesktop("skill-delete", (desktopBridge) => desktopBridge.deleteBrowserSkill(skill.id), () => {
+      removeBrowserSkill(skill.id);
+      setSkillNotice("技能已删除");
+    });
+  };
+
+  const importBrowserSkill = () => {
+    setSkillNotice(null);
+    if (isPreview) {
+      const template = previewState.browserSkills[0];
+      const importedSkill: BrowserSkill = {
+        ...template,
+        id: `preview-imported-${Date.now()}`,
+        name: "导入的通用网页检索",
+        description: "从 .cbskill 文件导入的浏览器工作流，默认停用以便先检查内容。",
+        status: "disabled",
+        source: "imported",
+        stats: { runCount: 0, successCount: 0, failureCount: 0, averageDurationMs: 0 },
+        version: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      applyBrowserSkill(importedSkill);
+      setSkillNotice("技能已导入并保持停用（预览）");
+      return;
+    }
+    void invokeDesktop("skill-import", (desktopBridge) => desktopBridge.importBrowserSkill(), (importedSkill) => {
+      if (!importedSkill) return;
+      applyBrowserSkill(importedSkill);
+      setSkillNotice("技能已导入，请检查后启用");
+    });
+  };
+
+  const exportBrowserSkill = (skill: BrowserSkill) => {
+    setSkillNotice(null);
+    if (isPreview) {
+      setSkillNotice(`已导出“${skill.name}”（预览）`);
+      return;
+    }
+    void invokeDesktop("skill-export", (desktopBridge) => desktopBridge.exportBrowserSkill(skill.id), (exported) => {
+      if (exported) setSkillNotice(`已导出“${skill.name}”`);
+    });
+  };
+
+  const learnBrowserSkillTrace = (traceId: string) => {
+    setSkillNotice(null);
+    if (isPreview) {
+      const trace = viewState.browserSkillTraces.find((item) => item.id === traceId);
+      if (!trace) return;
+      const createdAt = new Date().toISOString();
+      const draftSkill: BrowserSkill = {
+        schemaVersion: 1,
+        id: `preview-learned-${Date.now()}`,
+        name: trace.title,
+        description: `从 ${trace.host ?? "当前网站"} 的 ${trace.operationCount} 次操作中生成，请检查触发条件和参数。`,
+        status: "draft",
+        risk: "interaction",
+        trigger: { hosts: trace.host ? [trace.host] : [], pathPatterns: [], keywords: [] },
+        inputs: [],
+        steps: [{ id: "learned-step", label: "等待页面稳定", method: "browser.wait", params: { condition: "idle" }, risk: "read_only" }],
+        stats: { runCount: 0, successCount: 0, failureCount: 0, averageDurationMs: 0 },
+        source: "learned",
+        sourceTraceId: trace.id,
+        version: 1,
+        createdAt,
+        updatedAt: createdAt,
+      };
+      applyBrowserSkill(draftSkill);
+      setState((current) => current ? {
+        ...current,
+        browserSkillTraces: current.browserSkillTraces.map((item) => item.id === traceId ? { ...item, status: "learned", draftSkillId: draftSkill.id, updatedAt: createdAt } : item),
+      } : current);
+      setSkillNotice("已生成可编辑技能草稿（预览）");
+      return;
+    }
+    void invokeDesktop("skill-learn", (desktopBridge) => desktopBridge.createBrowserSkillFromTrace(traceId), (createdSkill) => {
+      applyBrowserSkill(createdSkill);
+      setSkillNotice("已生成可编辑技能草稿");
+    });
+  };
+
+  const discardBrowserSkillTrace = (traceId: string) => {
+    setSkillNotice(null);
+    if (isPreview) {
+      removeBrowserSkillTrace(traceId);
+      setSkillNotice("学习记录已忽略（预览）");
+      return;
+    }
+    void invokeDesktop("skill-discard", (desktopBridge) => desktopBridge.discardBrowserSkillTrace(traceId), () => {
+      removeBrowserSkillTrace(traceId);
+      setSkillNotice("学习记录已忽略");
+    });
+  };
+
+  const runBrowserSkill = (skill: BrowserSkill, inputs: Record<string, string | number | boolean>, confirmed: boolean) => {
+    setSkillNotice(null);
+    if (isPreview) {
+      const startedAt = new Date().toISOString();
+      setState((current) => current ? {
+        ...current,
+        browserSkillRun: {
+          id: `preview-run-${Date.now()}`,
+          skillId: skill.id,
+          skillName: skill.name,
+          status: "running",
+          currentStep: 1,
+          totalSteps: skill.steps.length,
+          detail: `已接收 ${Object.keys(inputs).length} 个参数，正在验证当前页面`,
+          startedAt,
+        },
+      } : current);
+      setSkillNotice("技能已开始运行（预览）");
+      return;
+    }
+    void invokeDesktop("skill-run", (desktopBridge) => desktopBridge.runBrowserSkill(skill.id, inputs, confirmed), (run) => {
+      setState((current) => current ? { ...current, browserSkillRun: run } : current);
+      setSkillNotice("技能已开始运行");
+    });
+  };
+
   const activeDownload = viewState.downloads.find((download) => download.state === "progressing" || download.state === "starting");
   const recentDownload = useMemo(() => newestByCreatedAt(viewState.downloads), [viewState.downloads]);
   const recentDocument = useMemo(() => newestByCreatedAt(viewState.documents), [viewState.documents]);
@@ -584,10 +1211,10 @@ function App() {
   const healthChecking = busyAction === "check-session" || busyAction === "complete-auth" || viewState.sessionHealth.status === "checking";
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${skillDrawerOpen ? " skill-drawer-open" : ""}`}>
       <header className="topbar">
         <div className="brand" title="Codex Browser">
-          <div className="brand-mark"><Globe2 size={18} /></div>
+          <div className="brand-mark"><img src={appIconUrl} alt="" /></div>
           <span>Codex Browser</span>
         </div>
 
@@ -621,6 +1248,10 @@ function App() {
         <div className={`runtime-pill ${statusClass}`} title={viewState.currentAction}>
           <span className="runtime-dot" />
           <span>{statusLabel(viewState.runtimeStatus)}</span>
+        </div>
+        <div className={`skill-toolbar-control${skillDrawerOpen ? " open" : ""}`}>
+          <IconButton label={skillDrawerOpen ? "关闭浏览器技能库" : "打开浏览器技能库"} onClick={() => setSkillDrawerOpen((open) => !open)}><BrainCircuit size={16} /></IconButton>
+          {viewState.browserSkillTraces.some((trace) => ["recording", "ready"].includes(trace.status)) && <span className="skill-toolbar-badge" aria-label="有待学习的操作记录">{viewState.browserSkillTraces.filter((trace) => ["recording", "ready"].includes(trace.status)).length}</span>}
         </div>
         <IconButton
           label={viewState.runtimeStatus === "paused" ? "继续 Codex 控制" : "暂停 Codex 控制"}
@@ -682,10 +1313,10 @@ function App() {
             <RefreshCw className={busyAction === "check-session" ? "spin" : ""} size={14} />
             <span>检查会话</span>
           </button>
-          <div className="storage-status" title={`本地记录：${viewState.storage.taskCount} 个任务、${viewState.storage.downloadCount} 个下载、${viewState.storage.documentCount} 篇文献`}>
+          <div className="storage-status" title={`本地记录：${viewState.storage.taskCount} 个任务、${viewState.storage.downloadCount} 个下载、${viewState.storage.documentCount} 篇文献、${viewState.storage.browserSkillCount} 个技能`}>
             <HardDrive size={15} />
             <strong>{formatSavedAt(viewState.storage.lastSavedAt)}</strong>
-            <span>{viewState.storage.taskCount} 任务 · {viewState.storage.downloadCount} 下载 · {viewState.storage.documentCount} 文献</span>
+            <span>{viewState.storage.taskCount} 任务 · {viewState.storage.downloadCount} 下载 · {viewState.storage.documentCount} 文献 · {viewState.storage.browserSkillCount} 技能</span>
           </div>
           <div className="backup-status" title={viewState.sessionHealth.encryptedBackupAvailable ? "Cookie 会话已有本机加密备份" : "浏览器 Profile 将持续保存在本机"}>
             <Cookie size={14} />
@@ -883,7 +1514,7 @@ function App() {
         </div>
       )}
 
-      <div className="workspace">
+      <div className={`workspace${skillDrawerOpen ? " has-skill-drawer" : ""}`}>
         <aside className="task-sidebar">
           <div className="sidebar-heading">
             <Activity size={16} />
@@ -987,6 +1618,24 @@ function App() {
             <span className="action-page" title={viewState.title}>{viewState.title}</span>
           </div>
         </main>
+        {skillDrawerOpen && (
+          <BrowserSkillDrawer
+            skills={viewState.browserSkills}
+            traces={viewState.browserSkillTraces}
+            currentRun={viewState.browserSkillRun}
+            busy={busyAction !== null}
+            notice={skillNotice}
+            onClose={() => setSkillDrawerOpen(false)}
+            onImport={importBrowserSkill}
+            onSave={saveBrowserSkill}
+            onStatus={changeBrowserSkillStatus}
+            onDelete={deleteBrowserSkill}
+            onExport={exportBrowserSkill}
+            onLearnTrace={learnBrowserSkillTrace}
+            onDiscardTrace={discardBrowserSkillTrace}
+            onRun={runBrowserSkill}
+          />
+        )}
       </div>
 
       <footer className="bottom-dock">

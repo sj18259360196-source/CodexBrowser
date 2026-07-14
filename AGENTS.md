@@ -19,7 +19,7 @@
 
 - Treat the plugin source, installed plugin record, and Codex plugin cache as three separate states that must be checked after every plugin-related change.
 - Before the final response for a plugin-related session:
-  - Compare the version in `C:\Users\22865\plugins\codex-browser\.codex-plugin\plugin.json` with `codex plugin list`.
+  - Compare the version in `%USERPROFILE%\plugins\codex-browser\.codex-plugin\plugin.json` with `codex plugin list`.
   - Run the plugin-creator cachebuster helper and reinstall `codex-browser@personal` when source files or plugin metadata changed.
   - Validate the personal plugin, confirm the new cache directory is populated, and run `npm run smoke:mcp`.
   - Record the installed version and verification result in the session work log.

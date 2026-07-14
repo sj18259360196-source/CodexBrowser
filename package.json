@@ -1,24 +1,44 @@
 {
   "name": "codex-browser",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "A visible, persistent Chromium runtime for Codex with research and document tools.",
+  "author": {
+    "name": "Codex Browser contributors"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/sj18259360196-source/CodexBrowser#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sj18259360196-source/CodexBrowser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sj18259360196-source/CodexBrowser/issues"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "main": "dist/electron/main.js",
   "scripts": {
     "postinstall": "node node_modules/electron/install.js",
     "dev": "vite --host 127.0.0.1",
     "build": "npm run build:renderer && npm run build:electron && npm run build:mcp",
     "build:renderer": "vite build",
-    "build:electron": "tsup src/electron/main.ts src/electron/preload.ts src/electron/persistence-service.ts --format cjs --out-dir dist/electron --clean --sourcemap --external electron",
+    "build:electron": "tsup src/electron/main.ts src/electron/preload.ts src/electron/persistence-service.ts src/electron/browser-skill-service.ts --format cjs --out-dir dist/electron --clean --sourcemap --external electron",
     "build:mcp": "tsup src/mcp/index.ts --format esm --out-dir dist/mcp --clean --sourcemap",
     "start": "electron .",
     "preview": "vite preview --host 127.0.0.1",
+    "package:win": "npm run build && node scripts/build-windows.mjs dir",
+    "installer:win": "npm run build && node scripts/build-windows.mjs installer",
     "typecheck": "tsc --noEmit",
     "smoke:mcp": "node scripts/mcp-smoke.mjs",
     "smoke:actions": "node scripts/browser-action-smoke.mjs",
     "smoke:runtime": "node scripts/runtime-control-smoke.mjs",
     "smoke:credentials": "node scripts/credential-autologin-smoke.mjs",
-    "smoke:advanced": "node scripts/advanced-control-smoke.mjs"
+    "smoke:advanced": "node scripts/advanced-control-smoke.mjs",
+    "smoke:skills": "node scripts/browser-skill-smoke.mjs",
+    "smoke:skills-runtime": "node scripts/browser-skill-runtime-smoke.mjs",
+    "smoke:package": "node scripts/packaged-runtime-smoke.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -34,8 +54,63 @@
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.3"
+  },
+  "build": {
+    "appId": "com.codex.browser",
+    "productName": "Codex Browser",
+    "artifactName": "Codex-Browser-Setup-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets/branding"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/branding",
+        "to": "branding",
+        "filter": [
+          "icon.ico",
+          "tray.png"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "assets/branding/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Codex Browser",
+      "runAfterFinish": true,
+      "installerIcon": "assets/branding/installer.ico",
+      "uninstallerIcon": "assets/branding/uninstaller.ico",
+      "installerHeader": "assets/branding/installer-header.bmp",
+      "installerSidebar": "assets/branding/installer-sidebar.bmp",
+      "uninstallerSidebar": "assets/branding/uninstaller-sidebar.bmp",
+      "installerLanguages": [
+        "en_US",
+        "zh_CN"
+      ],
+      "multiLanguageInstaller": true
+    }
   }
 }

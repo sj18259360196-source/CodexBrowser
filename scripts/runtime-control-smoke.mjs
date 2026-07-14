@@ -1,10 +1,9 @@
 import { createServer } from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { createSmokeRuntime } from "./smoke-runtime.mjs";
 
-const launcher = "C:\\Users\\22865\\plugins\\codex-browser\\scripts\\launch-mcp.mjs";
-const env = Object.fromEntries(Object.entries(process.env).filter((entry) => typeof entry[1] === "string"));
-env.CODEX_BROWSER_PROJECT_ROOT = "A:\\Project\\CodexBrowser";
+const runtime = createSmokeRuntime("runtime-smoke");
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -69,9 +68,10 @@ await new Promise((resolve, reject) => {
 });
 
 const client = new Client({ name: "codex-browser-runtime-smoke", version: "0.1.0" });
-const transport = new StdioClientTransport({ command: "node", args: [launcher], env });
+const transport = new StdioClientTransport({ command: "node", args: [runtime.mcpServerPath], env: runtime.env });
 
 try {
+  await runtime.start();
   await client.connect(transport);
   await client.callTool({ name: "browser_resume", arguments: {} });
   await client.callTool({ name: "browser_stop", arguments: {} });
@@ -150,4 +150,5 @@ try {
 } finally {
   await client.close().catch(() => undefined);
   await new Promise((resolve) => fixture.close(resolve));
+  await runtime.stop();
 }

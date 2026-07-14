@@ -1,9 +1,36 @@
+import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { createSmokeRuntime, projectRoot } from "./smoke-runtime.mjs";
 
-const launcher = "C:\\Users\\22865\\plugins\\codex-browser\\scripts\\launch-mcp.mjs";
-const env = Object.fromEntries(Object.entries(process.env).filter((entry) => typeof entry[1] === "string"));
-env.CODEX_BROWSER_PROJECT_ROOT = "A:\\Project\\CodexBrowser";
+const runtime = createSmokeRuntime("action-smoke");
+const fixtureRoot = path.join(projectRoot, "src", "renderer");
+const fixture = createServer(async (request, response) => {
+  try {
+    const pathname = new URL(request.url || "/", "http://127.0.0.1").pathname;
+    const fileName = pathname === "/auth-test.html" ? "auth-test.html" : "interaction-test.html";
+    const body = await readFile(path.join(fixtureRoot, fileName));
+    response.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Content-Length": body.length,
+    });
+    response.end(body);
+  } catch (error) {
+    response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end(error instanceof Error ? error.message : String(error));
+  }
+});
+
+await new Promise((resolve, reject) => {
+  fixture.once("error", reject);
+  fixture.listen(0, "127.0.0.1", resolve);
+});
+const address = fixture.address();
+if (!address || typeof address === "string") throw new Error("Action fixture did not expose a TCP port.");
+const fixtureOrigin = `http://127.0.0.1:${address.port}`;
 
 function parseTextResult(result) {
   const block = result.content?.find((item) => item.type === "text");
@@ -18,13 +45,14 @@ function requireElement(snapshot, predicate, label) {
 }
 
 const client = new Client({ name: "codex-browser-action-smoke", version: "0.1.0" });
-const transport = new StdioClientTransport({ command: "node", args: [launcher], env });
+const transport = new StdioClientTransport({ command: "node", args: [runtime.mcpServerPath], env: runtime.env });
 
 try {
+  await runtime.start();
   await client.connect(transport);
   await client.callTool({
     name: "browser_navigate",
-    arguments: { url: "http://127.0.0.1:5173/interaction-test.html" },
+    arguments: { url: `${fixtureOrigin}/interaction-test.html` },
   });
 
   const initialSnapshot = parseTextResult(await client.callTool({ name: "browser_snapshot", arguments: {} }));
@@ -60,7 +88,7 @@ try {
 
   await client.callTool({
     name: "browser_navigate",
-    arguments: { url: "http://127.0.0.1:5173/auth-test.html" },
+    arguments: { url: `${fixtureOrigin}/auth-test.html` },
   });
   const authSnapshot = parseTextResult(await client.callTool({ name: "browser_snapshot", arguments: {} }));
   const password = requireElement(authSnapshot, (item) => item.type === "password", "the password field");
@@ -84,5 +112,7 @@ try {
     sensitivePasswordBlocked: true,
   }, null, 2));
 } finally {
-  await client.close();
+  await client.close().catch(() => undefined);
+  await new Promise((resolve) => fixture.close(resolve));
+  await runtime.stop();
 }

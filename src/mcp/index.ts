@@ -9,20 +9,21 @@ import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import type { PipeRequest, PipeResponse } from "../shared/contracts";
+import { DEFAULT_BROWSER_PIPE_NAME, type PipeRequest, type PipeResponse } from "../shared/contracts";
 
 function sanitizedPipeName(value: string | undefined): string {
-  const normalized = (value || "codex-browser-v1")
+  const normalized = (value || DEFAULT_BROWSER_PIPE_NAME)
     .trim()
     .replace(/[^a-z0-9._-]+/gi, "-")
     .replace(/-+/g, "-")
     .replace(/^[.-]+|[.-]+$/g, "")
     .slice(0, 80);
-  return normalized || "codex-browser-v1";
+  return normalized || DEFAULT_BROWSER_PIPE_NAME;
 }
 
 const PIPE_NAME = sanitizedPipeName(process.env.CODEX_BROWSER_PIPE_NAME);
 const PIPE_PATH = process.platform === "win32" ? `\\\\.\\pipe\\${PIPE_NAME}` : `/tmp/${PIPE_NAME}.sock`;
+const CLIENT_SESSION_ID = randomUUID();
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(process.env.CODEX_BROWSER_PROJECT_ROOT || path.join(moduleDir, "../.."));
 let desktopProcess: ChildProcess | null = null;
@@ -47,7 +48,7 @@ function timeoutForMethod(method: string): number {
 
 function sendPipeRequest(method: string, params: Record<string, unknown> = {}, timeoutMs = 35_000): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const request: PipeRequest = { id: randomUUID(), method, params };
+    const request: PipeRequest = { id: randomUUID(), method, params, clientSessionId: CLIENT_SESSION_ID };
     const socket = connect(PIPE_PATH);
     let buffer = "";
     const timeout = setTimeout(() => {
@@ -283,6 +284,28 @@ registerTool("browser_reload", "Reload a browser tab.", { tabId: tabIdSchema.opt
 registerTool("browser_pause", "Pause Codex browser control so the user can take over.", {}, "browser.pause");
 registerTool("browser_resume", "Resume Codex browser control after user interaction.", {}, "browser.resume");
 registerTool("browser_stop", "Stop the current browser load or task immediately.", {}, "browser.stop");
+registerTool("browser_skill_list", "List browser-native reusable workflows. These skills are local dynamic data, not Codex prompt skills, and can change without restarting the MCP server.", {
+  includeDrafts: z.boolean().optional().describe("Include draft, disabled, and stale skills; defaults to false"),
+}, "browser_skill.list");
+registerTool("browser_skill_match", "Find enabled browser skills that match a task description and optional current URL before planning repetitive page operations.", {
+  query: z.string().trim().min(1).max(1000).describe("Plain-language browser task to match"),
+  url: z.string().max(4000).optional().describe("Optional current or intended HTTP(S) URL"),
+  limit: z.number().int().min(1).max(20).optional(),
+}, "browser_skill.match");
+registerTool("browser_skill_run", "Run an enabled browser skill with fresh semantic element resolution and per-step verification. The run stops on page drift or unsafe actions.", {
+  skillId: z.string().min(1).max(160),
+  inputs: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+  userConfirmed: z.boolean().optional().describe("Set true only after the user explicitly confirms a skill containing confirmation-risk steps"),
+}, "browser_skill.run");
+registerTool("browser_skill_learn", "Finalize the browser operations recorded for this MCP task and create a local draft browser skill for user review. Never include credentials or verification values in the title or description.", {
+  name: z.string().trim().min(1).max(120).optional(),
+  description: z.string().trim().max(1000).optional(),
+}, "browser_skill.learn");
+registerTool("browser_skill_feedback", "Record whether a browser skill was useful after reviewing its outcome. This updates local confidence statistics without changing its steps.", {
+  skillId: z.string().min(1).max(160),
+  outcome: z.enum(["success", "failure"]),
+  durationMs: z.number().int().min(0).max(86_400_000).optional(),
+}, "browser_skill.feedback");
 registerTool("auth_request_login", "Bring the desktop browser forward and open an institution or site login page. Passwords, MFA, and captchas must be completed by the user.", {
   url: z.string().min(1).describe("Official login or off-campus access URL"),
   tabId: tabIdSchema.optional(),

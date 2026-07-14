@@ -1,4 +1,5 @@
-export const BROWSER_PROTOCOL_VERSION = "1.2.0";
+export const BROWSER_PROTOCOL_VERSION = "1.3.0";
+export const DEFAULT_BROWSER_PIPE_NAME = "525901";
 
 export type RuntimeStatus =
   | "idle"
@@ -123,6 +124,98 @@ export interface LocalStorageStatus {
   taskCount: number;
   downloadCount: number;
   documentCount: number;
+  browserSkillCount: number;
+  browserSkillTraceCount: number;
+}
+
+export type BrowserSkillStatus = "draft" | "enabled" | "disabled" | "stale";
+export type BrowserSkillRisk = "read_only" | "interaction" | "confirmation";
+export type BrowserSkillTraceStatus = "recording" | "ready" | "learned" | "discarded";
+export type BrowserSkillRunStatus = "running" | "done" | "error" | "cancelled";
+
+export interface BrowserSkillTarget {
+  tag?: string;
+  role?: string;
+  name?: string;
+  text?: string;
+  type?: string;
+  placeholder?: string;
+  hrefPath?: string;
+}
+
+export interface BrowserSkillInput {
+  name: string;
+  label: string;
+  type: "text" | "url" | "number" | "boolean";
+  required: boolean;
+  sensitive: boolean;
+  defaultValue?: string | number | boolean;
+}
+
+export interface BrowserSkillStep {
+  id: string;
+  label: string;
+  method: string;
+  params: Record<string, unknown>;
+  target?: BrowserSkillTarget;
+  risk: BrowserSkillRisk;
+  continueOnFailure?: boolean;
+}
+
+export interface BrowserSkillTrigger {
+  hosts: string[];
+  pathPatterns: string[];
+  keywords: string[];
+}
+
+export interface BrowserSkillStats {
+  runCount: number;
+  successCount: number;
+  failureCount: number;
+  averageDurationMs: number;
+  lastRunAt?: string;
+  lastSuccessAt?: string;
+}
+
+export interface BrowserSkill {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  description: string;
+  status: BrowserSkillStatus;
+  risk: BrowserSkillRisk;
+  trigger: BrowserSkillTrigger;
+  inputs: BrowserSkillInput[];
+  steps: BrowserSkillStep[];
+  stats: BrowserSkillStats;
+  source: "learned" | "manual" | "imported";
+  sourceTraceId?: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BrowserSkillTraceSummary {
+  id: string;
+  title: string;
+  host?: string;
+  status: BrowserSkillTraceStatus;
+  operationCount: number;
+  startedAt: string;
+  updatedAt: string;
+  draftSkillId?: string;
+}
+
+export interface BrowserSkillRun {
+  id: string;
+  skillId: string;
+  skillName: string;
+  status: BrowserSkillRunStatus;
+  currentStep: number;
+  totalSteps: number;
+  detail: string;
+  startedAt: string;
+  completedAt?: string;
 }
 
 export interface AppState {
@@ -147,6 +240,9 @@ export interface AppState {
   tasks: TaskItem[];
   downloads: DownloadItem[];
   documents: DocumentSummary[];
+  browserSkills: BrowserSkill[];
+  browserSkillTraces: BrowserSkillTraceSummary[];
+  browserSkillRun: BrowserSkillRun | null;
 }
 
 export interface BrowserObservation {
@@ -226,6 +322,7 @@ export interface PipeRequest {
   id: string;
   method: string;
   params?: Record<string, unknown>;
+  clientSessionId?: string;
 }
 
 export interface PipeResponse {
@@ -266,4 +363,16 @@ export interface DesktopBridge {
   openDownloads(): Promise<void>;
   openDownload(downloadId: string): Promise<void>;
   openDocument(documentId: string): Promise<void>;
+  saveBrowserSkill(skill: BrowserSkill): Promise<BrowserSkill>;
+  setBrowserSkillStatus(skillId: string, status: BrowserSkillStatus): Promise<BrowserSkill>;
+  deleteBrowserSkill(skillId: string): Promise<void>;
+  importBrowserSkill(): Promise<BrowserSkill | null>;
+  exportBrowserSkill(skillId: string): Promise<boolean>;
+  createBrowserSkillFromTrace(traceId: string): Promise<BrowserSkill>;
+  discardBrowserSkillTrace(traceId: string): Promise<void>;
+  runBrowserSkill(
+    skillId: string,
+    inputs?: Record<string, string | number | boolean>,
+    userConfirmed?: boolean,
+  ): Promise<BrowserSkillRun>;
 }
