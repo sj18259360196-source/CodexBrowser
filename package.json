@@ -1,0 +1,41 @@
+{
+  "name": "codex-browser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A visible, persistent Chromium runtime for Codex with research and document tools.",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run build:renderer && npm run build:electron && npm run build:mcp",
+    "build:renderer": "vite build",
+    "build:electron": "tsup src/electron/main.ts src/electron/preload.ts src/electron/persistence-service.ts --format cjs --out-dir dist/electron --clean --sourcemap --external electron",
+    "build:mcp": "tsup src/mcp/index.ts --format esm --out-dir dist/mcp --clean --sourcemap",
+    "start": "electron .",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "smoke:mcp": "node scripts/mcp-smoke.mjs",
+    "smoke:actions": "node scripts/browser-action-smoke.mjs",
+    "smoke:runtime": "node scripts/runtime-control-smoke.mjs",
+    "smoke:credentials": "node scripts/credential-autologin-smoke.mjs",
+    "smoke:advanced": "node scripts/advanced-control-smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "lucide-react": "^0.468.0",
+    "pdfjs-dist": "^5.4.149",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^43.1.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3"
+  }
+}

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Browser Interaction Test</title>
+    <style>
+      body { margin: 0; font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; color: #202421; background: #edf1ef; }
+      main { width: min(680px, calc(100% - 48px)); margin: 56px auto; padding: 28px; background: white; border: 1px solid #d1d9d5; border-radius: 8px; }
+      h1 { margin: 0 0 8px; font-size: 25px; }
+      p { color: #68716c; line-height: 1.6; }
+      .form-row { display: grid; grid-template-columns: 1fr 180px auto; gap: 10px; margin-top: 24px; }
+      input, select, button { min-width: 0; height: 40px; border-radius: 5px; font: inherit; }
+      input, select { border: 1px solid #bfcac4; padding: 0 10px; background: white; }
+      button { border: 0; padding: 0 16px; color: white; background: #12634a; font-weight: 700; }
+      #result { min-height: 48px; margin-top: 22px; padding: 14px; border-left: 4px solid #3e7ea3; background: #edf5f8; }
+      .extra { height: 780px; padding-top: 42px; color: #5f6963; }
+      @media (max-width: 700px) { .form-row { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Research query</h1>
+      <p>This local page verifies referenced snapshots, normal field filling, selection, clicking, waiting, and scrolling.</p>
+      <div class="form-row">
+        <input id="topic" name="topic" placeholder="Research topic" aria-label="Research topic" />
+        <select id="source" name="source" aria-label="Metadata source">
+          <option value="crossref">Crossref</option>
+          <option value="openalex">OpenAlex</option>
+        </select>
+        <button id="run" type="button">Run query</button>
+      </div>
+      <div id="result" aria-live="polite">Waiting for a query.</div>
+      <div id="key-result" aria-live="polite">Waiting for a key.</div>
+      <div class="extra" id="details">Additional result details appear below after scrolling.</div>
+    </main>
+    <script>
+      const topic = document.querySelector('#topic');
+      const source = document.querySelector('#source');
+      const result = document.querySelector('#result');
+      const keyResult = document.querySelector('#key-result');
+      window.scrollTo(0, 0);
+      document.body.dataset.scrolled = 'false';
+      topic.addEventListener('keydown', (event) => {
+        document.body.dataset.lastKey = event.key;
+        keyResult.textContent = `Key: ${event.key}`;
+      });
+      window.addEventListener('scroll', () => {
+        document.body.dataset.scrolled = window.scrollY > 100 ? 'true' : 'false';
+      }, { passive: true });
+      document.querySelector('#run').addEventListener('click', () => {
+        result.textContent = 'Running query...';
+        setTimeout(() => {
+          result.textContent = `Ready: ${topic.value} via ${source.value}`;
+        }, 250);
+      });
+    </script>
+  </body>
+</html>

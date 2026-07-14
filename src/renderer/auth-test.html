@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>高校统一身份认证测试</title>
+    <style>
+      body { margin: 0; font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; background: #eef2f0; color: #202421; }
+      main { width: 360px; margin: 90px auto; padding: 28px; background: white; border: 1px solid #d5dcd8; border-radius: 8px; }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      p { color: #66706a; font-size: 13px; line-height: 1.6; }
+      label { display: block; margin-top: 16px; font-size: 12px; font-weight: 700; }
+      input { width: 100%; height: 38px; margin-top: 6px; box-sizing: border-box; border: 1px solid #bdc8c2; border-radius: 5px; padding: 0 10px; }
+      button { width: 100%; height: 40px; margin-top: 20px; border: 0; border-radius: 5px; background: #12634a; color: white; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>高校统一身份认证</h1>
+      <p>此页面仅用于验证 Codex Browser 的登录提醒和人工接管状态。</p>
+      <form>
+        <label>账号<input name="username" autocomplete="username" /></label>
+        <label>密码<input name="password" type="password" autocomplete="current-password" /></label>
+        <button type="button" id="login-button">登录</button>
+      </form>
+    </main>
+    <script>
+      document.getElementById("login-button").addEventListener("click", () => {
+        const main = document.querySelector("main");
+        document.cookie = "codex_browser_auth_fixture=active; path=/; SameSite=Lax";
+        main.innerHTML = `
+          <h1>授权完成</h1>
+          <p>测试会话已建立。Codex Browser 现在应当可以验证并继续任务。</p>
+        `;
+        document.title = "高校授权已完成";
+      });
+    </script>
+  </body>
+</html>

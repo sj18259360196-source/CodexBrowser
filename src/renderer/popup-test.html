@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Browser Popup Test</title>
+    <style>
+      body { margin: 0; font-family: "Segoe UI", sans-serif; color: #202421; background: #eef2f0; }
+      main { width: min(520px, calc(100% - 40px)); margin: 50px auto; }
+      h1 { margin: 0 0 10px; font-size: 24px; }
+      p { color: #5f6963; line-height: 1.6; }
+      output { display: block; padding: 12px; border-left: 4px solid #12634a; background: white; font: 600 13px/1.5 Consolas, monospace; }
+      button { height: 38px; margin-top: 16px; border: 1px solid #9eaaa4; border-radius: 5px; padding: 0 14px; background: white; font: 650 14px "Segoe UI", sans-serif; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Popup child</h1>
+      <p>This page verifies that a newly managed tab retains its JavaScript opener relationship.</p>
+      <output id="opener-status">Opener: checking</output>
+      <button id="send-message" type="button">Send opener message</button>
+    </main>
+    <script>
+      const status = document.querySelector("#opener-status");
+      const send = () => {
+        if (!window.opener) {
+          status.textContent = "Opener: missing";
+          return;
+        }
+        window.opener.postMessage({ type: "codex-popup-ready", message: "ready from child" }, location.origin);
+        status.textContent = "Opener: message sent";
+      };
+      document.querySelector("#send-message").addEventListener("click", send);
+      queueMicrotask(send);
+    </script>
+  </body>
+</html>
