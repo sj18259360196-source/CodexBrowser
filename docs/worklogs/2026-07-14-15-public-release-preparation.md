@@ -43,6 +43,9 @@ Prepare the current Codex Browser changes for a public Windows preview release t
 - `npm audit --omit=dev` reported zero production vulnerabilities.
 - The complete audit reports one low-severity development-only `esbuild` advisory; `npm audit fix` has no compatible change because the current latest `tsup` requires `esbuild ^0.27.0`.
 - Confirmed Windows Defender recorded no threat detection during the observed A-drive packaging race.
+- Created commit `b96e3e2` (`Prepare public v0.1.1 preview`) on `codex/public-v0.1.1`.
+- Pushed `codex/public-v0.1.1` to `origin` with upstream tracking.
+- Opened draft pull request `#1`: `https://github.com/sj18259360196-source/CodexBrowser/pull/1`.
 
 ## Known issues
 
@@ -50,6 +53,7 @@ Prepare the current Codex Browser changes for a public Windows preview release t
 - The public one-click Codex plugin is not packaged yet; installed desktop users still need the source checkout for direct MCP registration.
 - The latest toolchain currently carries one low-severity development-only `esbuild` advisory affecting a local Windows development server; production dependencies audit clean and Vite binds to `127.0.0.1`.
 - The installer passed local silent install/uninstall and packaged runtime checks but has not been tested manually on a separate clean Windows machine.
+- The installer and checksum remain local ignored artifacts until pull request `#1` is accepted and the release tag can point at the default branch.
 - Historical work logs retain development-machine paths as session history; no credentials, cookies, authorization headers, or browser-profile data are recorded.
 
 ## Next steps
@@ -57,5 +61,5 @@ Prepare the current Codex Browser changes for a public Windows preview release t
 - Run the complete verification suite using the repository-only smoke paths.
 - Build and inspect the Windows installer and checksum.
 - Review the complete public diff for secrets and generated-file hygiene.
-- Commit and push the release branch, then open a draft pull request.
-- Publish the preview Release after the release commit is accepted on the default branch.
+- Review and merge draft pull request `#1` into `main`.
+- Rebuild or verify the installer from the accepted commit, then publish the unsigned `v0.1.1` prerelease with its SHA-256 file.
