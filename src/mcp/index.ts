@@ -104,7 +104,7 @@ function launchDesktop(): void {
   const selection = process.env.CODEX_BROWSER_RUNTIME?.trim()
     ? resolveBrowserRuntime(process.env)
     : { runtime: loadRuntimeSettings(resolveCodexBrowserProductRoot(process.env)).preferredRuntime };
-  const useExternalEdge = selection.runtime === "external-edge";
+  const useExternalEdge = selection.runtime === "external-edge" || selection.runtime === "edge-extension";
   const electronExecutable = process.platform === "win32"
     ? path.join(projectRoot, "node_modules", "electron", "dist", "electron.exe")
     : path.join(projectRoot, "node_modules", ".bin", "electron");

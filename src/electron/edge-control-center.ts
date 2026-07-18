@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Notification } from "electron";
+import { app, BrowserWindow, ipcMain, Notification, shell } from "electron";
 import { connect } from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -87,6 +87,8 @@ app.whenReady().then(async () => {
   register("runtime:restart-browser", "runtime.restart_browser");
   register("runtime:shutdown-browser", "runtime.shutdown_browser");
   register("runtime:update-settings", "runtime.update_settings", (settings) => settings as Record<string, unknown>);
+  register("runtime:relay-begin-pairing", "runtime.relay_begin_pairing");
+  ipcMain.handle("runtime:relay-open-extension-folder", () => shell.openPath(path.join(projectRoot, "extension", "edge-relay")));
   register("auth:complete", "auth.complete", (promptId) => ({ promptId, userConfirmed: true }));
   register("assistance:respond", "browser.assistance_complete", (assistanceId, outcome) => ({ assistanceId, outcome, userConfirmed: true }));
   register("dialog:respond", "browser.dialog_respond", (dialogId, accept, promptText) => ({ dialogId, accept, promptText }));

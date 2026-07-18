@@ -57,6 +57,8 @@ const bridge: DesktopBridge = {
   restartBrowser: () => ipcRenderer.invoke("runtime:restart-browser"),
   shutdownBrowser: () => ipcRenderer.invoke("runtime:shutdown-browser"),
   updateRuntimeSettings: (settings) => ipcRenderer.invoke("runtime:update-settings", settings),
+  beginEdgeRelayPairing: () => ipcRenderer.invoke("runtime:relay-begin-pairing"),
+  openEdgeRelayExtensionFolder: () => ipcRenderer.invoke("runtime:relay-open-extension-folder"),
 };
 
 contextBridge.exposeInMainWorld("codexBrowser", bridge);

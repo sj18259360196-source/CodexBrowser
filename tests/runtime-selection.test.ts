@@ -9,10 +9,11 @@ import { DEFAULT_RUNTIME_SETTINGS, loadRuntimeSettings, saveRuntimeSettings } fr
 test("external Edge is the safe default and legacy values have explicit aliases", () => {
   assert.equal(getConfiguredBrowserRuntime({}), "external-edge");
   assert.equal(resolveBrowserRuntime({ CODEX_BROWSER_RUNTIME: "external-edge" }).runtime, "external-edge");
+  assert.equal(resolveBrowserRuntime({ CODEX_BROWSER_RUNTIME: "edge-extension" }).runtime, "edge-extension");
   assert.equal(resolveBrowserRuntime({ CODEX_BROWSER_RUNTIME: "electron-legacy" }).runtime, "electron-legacy");
   assert.match(resolveBrowserRuntime({ CODEX_BROWSER_RUNTIME: "edge-prototype" }).migrationNotice || "", /deprecated/i);
   assert.match(resolveBrowserRuntime({ CODEX_BROWSER_RUNTIME: "electron" }).migrationNotice || "", /deprecated/i);
-  assert.throws(() => resolveBrowserRuntime({ CODEX_BROWSER_RUNTIME: "unsafe-runtime" }), /external-edge or electron-legacy/);
+  assert.throws(() => resolveBrowserRuntime({ CODEX_BROWSER_RUNTIME: "unsafe-runtime" }), /external-edge, edge-extension, or electron-legacy/);
 });
 
 test("runtime settings persist safe values and reject unsafe or malformed settings", () => {
@@ -22,6 +23,7 @@ test("runtime settings persist safe values and reject unsafe or malformed settin
     const saved = saveRuntimeSettings({ ...DEFAULT_RUNTIME_SETTINGS, preferredRuntime: "electron-legacy", notificationsEnabled: false }, root);
     assert.equal(saved.preferredRuntime, "electron-legacy");
     assert.equal(loadRuntimeSettings(root).notificationsEnabled, false);
+    assert.equal(saveRuntimeSettings({ ...DEFAULT_RUNTIME_SETTINGS, preferredRuntime: "edge-extension" }, root).preferredRuntime, "edge-extension");
     const file = path.join(root, "runtime-settings.json");
     assert.doesNotMatch(readFileSync(file, "utf8"), /password|cookie|cdp|profilePath/i);
     writeFileSync(file, "{broken", "utf8");

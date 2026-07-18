@@ -77,7 +77,7 @@ export function detectChallenge(evidence: BrowserChallengeEvidence): ChallengeDe
   if (evidence.refreshCount >= 3) { cfScore += 10; cfSignals.push("refresh_loop"); }
   if (evidence.unchangedMs >= 15_000) { cfScore += 5; cfSignals.push("stalled_challenge_page"); }
   if (cfScore >= CHALLENGE_SCORE_THRESHOLDS.confirmed) {
-    return result(evidence, "cloudflare", "confirmed", cfScore, cfSignals, "Cloudflare verification requires user action.", "challenge", "cloudflare");
+    return result(evidence, "cloudflare", "confirmed", cfScore, cfSignals, "Cloudflare verification requires user action. If the widget reports a generic failure, reload once with page translation and content-blocking extensions disabled.", "challenge", "cloudflare");
   }
 
   const passkeySignals: string[] = [];

@@ -1,5 +1,9 @@
 # Codex Browser Work Log
 
+- [2026-07-19 04 - Release 1.1.0 packaging and publication](docs/worklogs/2026-07-19-04-release-1.1.0.md): Versioned, packaged, verified, and published the ordinary Edge relay and challenge/PDF compatibility release.
+- [2026-07-19 03 - Ordinary Edge extension relay](docs/worklogs/2026-07-19-03-edge-extension-relay.md): Added an authenticated MV3 extension relay runtime for controlling tabs in the user's ordinary Edge profile while retaining CodexBrowser's existing action policy.
+- [2026-07-19 02 - ACS challenge loop](docs/worklogs/2026-07-19-02-acs-challenge-loop.md): Fixed PDF interception so ACS Cloudflare HTML and authentication responses pass through untouched, and documented the safe ordinary-Edge relay direction.
+- [2026-07-19 01 - Turnstile compatibility hardening](docs/worklogs/2026-07-19-01-turnstile-compatibility.md): Protected verification-provider iframes from script inspection, bounded focus emulation, added challenge regressions and troubleshooting guidance, and documented current GUI-smoke limits.
 - [2026-07-13 01 - Initial MVP](docs/worklogs/2026-07-13-01-initial-mvp.md): Built the visible Electron browser, persistent session, authentication alerts, PDF library, MCP server, and personal Codex plugin.
 - [2026-07-13 02 - Browser actions](docs/worklogs/2026-07-13-02-browser-actions.md): Added referenced page snapshots, safe browser interaction tools, event-driven waits, and the permanent work-log workflow.
 - [2026-07-14 01 - Session persistence and functional controls](docs/worklogs/2026-07-14-01-session-persistence.md): Fixed desktop IPC controls, added local state and encrypted session recovery, verified authorization checks, and expanded the MCP/plugin workflow.

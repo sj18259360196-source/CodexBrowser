@@ -237,7 +237,7 @@ export interface BrowserPolicyAuditEntry {
 }
 
 export interface BrowserRuntimeInfo {
-  kind: "external-edge" | "electron-legacy";
+  kind: "external-edge" | "edge-extension" | "electron-legacy";
   label: string;
   browserVersion?: string;
   connection: "starting" | "connecting" | "ready" | "reconnecting" | "stopped" | "error";
@@ -248,12 +248,19 @@ export interface BrowserRuntimeInfo {
 }
 
 export interface BrowserRuntimeSettings {
-  preferredRuntime: "external-edge" | "electron-legacy";
+  preferredRuntime: "external-edge" | "edge-extension" | "electron-legacy";
   keepEdgeRunningOnControlCenterClose: boolean;
   sessionRecoveryEnabled: boolean;
   notificationsEnabled: boolean;
   downloadBehavior: "managed";
   documentBehavior: "import-on-request";
+}
+
+export interface EdgeRelayStatus {
+  paired: boolean;
+  connected: boolean;
+  pairingWindowOpen: boolean;
+  port: number;
 }
 
 export interface AppState {
@@ -282,6 +289,7 @@ export interface AppState {
   policyAudit: BrowserPolicyAuditEntry[];
   runtimeInfo: BrowserRuntimeInfo;
   runtimeSettings: BrowserRuntimeSettings;
+  edgeRelay?: EdgeRelayStatus;
   tasks: TaskItem[];
   downloads: DownloadItem[];
   documents: DocumentSummary[];
@@ -425,4 +433,6 @@ export interface DesktopBridge {
   restartBrowser(): Promise<void>;
   shutdownBrowser(): Promise<void>;
   updateRuntimeSettings(settings: Partial<BrowserRuntimeSettings>): Promise<BrowserRuntimeSettings>;
+  beginEdgeRelayPairing(): Promise<EdgeRelayStatus>;
+  openEdgeRelayExtensionFolder(): Promise<void>;
 }

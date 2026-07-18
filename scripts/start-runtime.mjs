@@ -61,7 +61,7 @@ const child = spawn(process.execPath, [brokerEntry], {
   stdio: "ignore",
   env: {
     ...process.env,
-    CODEX_BROWSER_RUNTIME: "external-edge",
+    CODEX_BROWSER_RUNTIME: selected,
     CODEX_BROWSER_PROJECT_ROOT: projectRoot,
     CODEX_BROWSER_PIPE_NAME: pipeName,
     CODEX_BROWSER_SHOW_CONTROL_CENTER: "1",

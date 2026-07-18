@@ -53,11 +53,12 @@ run(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm ci --omit=dev --ig
 
 for (const file of [
   "dist",
+  "extension/edge-relay",
   "README.md",
   "start-local.cmd",
   "scripts/start-desktop.cmd",
   "scripts/start-runtime.mjs",
-  "docs/release/RELEASE_NOTES_1.0.0.md",
+  `docs/release/RELEASE_NOTES_${version}.md`,
 ]) await copy(file);
 
 const electronSource = path.join(projectRoot, "node_modules", "electron", "dist");
@@ -99,6 +100,7 @@ for (const required of [
   `${releaseName}/start-local.cmd`,
   `${releaseName}/dist/electron/main.js`,
   `${releaseName}/dist/mcp/index.mjs`,
+  `${releaseName}/extension/edge-relay/manifest.json`,
   `${releaseName}/node_modules/electron/dist/electron.exe`,
   `${releaseName}/release-manifest.json`,
 ]) {

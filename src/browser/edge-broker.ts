@@ -26,6 +26,9 @@ import {
 import { sanitizeError, sanitizeSensitiveText, sanitizeUrlForExposure } from "../security/redaction";
 import { DocumentService } from "../electron/document-service";
 import { EdgePrototypeRuntime } from "./edge-runtime";
+import { ExtensionRelayRuntime } from "./extension-relay-runtime";
+import { ExtensionRelayServer } from "./extension-relay-server";
+import type { BrowserRuntime } from "./browser-runtime";
 import { archiveOwnedEdgeProfile, createUniqueEdgeProfile, removeArchivedEdgeProfile, removeManagedEdgeProfile, resolvePrimaryEdgeProfile } from "./edge-profile";
 import type { EdgeBrowserAdapter } from "./edge-browser-adapter";
 import type { BrowserChallengeEvidence } from "./browser-adapter";
@@ -76,8 +79,17 @@ const dataConfirmations = new BrowserDataConfirmationStore();
 const actionAuthorizations = new ActionAuthorizationStore();
 const pendingConfirmedActions = new Map<string, { action: BrowserAction; task: TaskItem; policy: PolicyResult }>();
 let runtimeSettings = loadRuntimeSettings(productRoot);
+const extensionRelay = new ExtensionRelayServer(productRoot, Number(process.env.CODEX_BROWSER_RELAY_PORT || 32192));
+if (!temporaryProfile) await extensionRelay.start();
+let activeRuntimeKind: "external-edge" | "edge-extension" = "external-edge";
+const createRuntime = (): BrowserRuntime<EdgeBrowserAdapter> => {
+  activeRuntimeKind = runtimeSettings.preferredRuntime === "edge-extension" && !temporaryProfile ? "edge-extension" : "external-edge";
+  return activeRuntimeKind === "edge-extension"
+    ? new ExtensionRelayRuntime(extensionRelay, downloadsDir)
+    : new EdgePrototypeRuntime({ runtimeRoot, profileRoot, profileDir, downloadsDir });
+};
 
-let runtime = new EdgePrototypeRuntime({ runtimeRoot, profileRoot, profileDir, downloadsDir });
+let runtime = createRuntime();
 if (process.env.CODEX_BROWSER_EDGE_DEBUG === "1") console.error("[edge-broker] runtime-start");
 let connection = await runtime.start();
 if (process.env.CODEX_BROWSER_EDGE_DEBUG === "1") console.error("[edge-broker] runtime-ready");
@@ -155,7 +167,7 @@ async function startManagedEdge(reason: string): Promise<void> {
     pendingConfirmedActions.clear();
     assistanceCoordinator.cancelAll("Browser restarted"); assistanceBaselines.clear();
     await runtime.shutdown({ graceful: true }).catch(() => undefined);
-    runtime = new EdgePrototypeRuntime({ runtimeRoot, profileRoot, profileDir, downloadsDir });
+    runtime = createRuntime();
     connection = await runtime.start(); adapter = connection.adapter;
     for (const registered of tabStates.list()) tabStates.remove(registered.tabId);
     await syncTabStates();
@@ -327,6 +339,7 @@ function uncertainActionMessage(error: unknown): string {
 }
 
 async function resetEdgeProfile(): Promise<BrowserStorageSummary> {
+  if (activeRuntimeKind === "edge-extension") throw namedError("UNAVAILABLE_IN_RELAY", "The user's ordinary Edge profile cannot be reset by Codex Browser.");
   runtimeStatus = "paused";
   paused = true;
   currentAction = "正在重置专用 Edge Profile";
@@ -339,7 +352,7 @@ async function resetEdgeProfile(): Promise<BrowserStorageSummary> {
   assistanceBaselines.clear();
   await runtime.shutdown({ graceful: true });
   const archivedProfile = archiveOwnedEdgeProfile(profileDir, profileRoot);
-  runtime = new EdgePrototypeRuntime({ runtimeRoot, profileRoot, profileDir, downloadsDir });
+  runtime = createRuntime();
   try {
     connection = await runtime.start();
     adapter = connection.adapter;
@@ -384,7 +397,7 @@ async function state(): Promise<AppState> {
     canGoBack: active?.canGoBack || false,
     canGoForward: active?.canGoForward || false,
     profileId: "primary",
-    profileLabel: temporaryProfile ? "Edge 隔离测试 Profile" : "Edge 专用长期 Profile",
+    profileLabel: activeRuntimeKind === "edge-extension" ? "用户普通 Edge Profile" : temporaryProfile ? "Edge 隔离测试 Profile" : "Edge 专用长期 Profile",
     tabs: tabs.tabs.map(exposeTab),
     activeTabId: tabs.activeTabId,
     authPrompt: null,
@@ -400,20 +413,23 @@ async function state(): Promise<AppState> {
     },
     storage: { taskCount: tasks.length, downloadCount: downloads.length, documentCount: documents.length },
     browserStorage,
-    profileStatus: edgeProfileStatus(),
+    profileStatus: activeRuntimeKind === "edge-extension"
+      ? { id: "ordinary-edge", label: "用户普通 Edge Profile", state: extensionRelay.connected() ? "ready" : "error", persistent: true, browserManagedPasswords: true, syncEnabledByProject: false, detail: "Profile and credentials remain owned by the user's ordinary Edge.", checkedAt: new Date().toISOString() }
+      : edgeProfileStatus(),
     actionConfirmations: actionAuthorizations.list(),
     rememberedGrants: actionAuthorizations.listGrants(),
     policyAudit: actionAuthorizations.auditEntries(),
     runtimeInfo: {
-      kind: "external-edge",
-      label: "Microsoft Edge（独立运行时）",
+      kind: activeRuntimeKind,
+      label: activeRuntimeKind === "edge-extension" ? "Microsoft Edge（用户 Profile 扩展中继）" : "Microsoft Edge（独立运行时）",
       browserVersion: managedStatus.browserVersion,
       connection: connectionState,
       legacy: false,
       detail: sanitizeSensitiveText(managedStatus.detail, 500) || "受管 Edge 已就绪",
-      firstRun: firstRun && !temporaryProfile,
+      firstRun: firstRun && !temporaryProfile && activeRuntimeKind !== "edge-extension",
     },
     runtimeSettings: { ...runtimeSettings },
+    edgeRelay: extensionRelay.status(),
     tasks: tasks.map((task) => ({ ...task, detail: sanitizeSensitiveText(task.detail, 1_000) })),
     downloads,
     documents,
@@ -436,7 +452,7 @@ async function handle(method: string, params: Record<string, unknown>): Promise<
   if (browserDependent) await ensureManagedEdgeReady();
   switch (method) {
     case "browser.capabilities":
-      return { runtime: "external-edge", visible: true, tabs: true, snapshots: true, actions: true, waits: true, screenshots: true, dialogs: true, downloads: true, documents: true };
+      return { runtime: activeRuntimeKind, visible: true, tabs: true, snapshots: true, actions: true, waits: true, screenshots: true, dialogs: true, downloads: activeRuntimeKind !== "edge-extension", documents: true };
     case "browser.status":
       return state();
     case "browser.storage_summary":
@@ -455,7 +471,7 @@ async function handle(method: string, params: Record<string, unknown>): Promise<
       pendingConfirmedActions.clear();
       runtimeStatus = "running"; currentAction = "正在重启受管 Edge";
       await runtime.shutdown({ graceful: true });
-      runtime = new EdgePrototypeRuntime({ runtimeRoot, profileRoot, profileDir, downloadsDir });
+      runtime = createRuntime();
       connection = await runtime.start(); adapter = connection.adapter;
       await syncTabStates(); finish("受管 Edge 已重启");
       browserStoppedByUser = false;
@@ -469,6 +485,10 @@ async function handle(method: string, params: Record<string, unknown>): Promise<
       return { ok: true };
     case "runtime.settings":
       return { ...runtimeSettings };
+    case "runtime.relay_status":
+      return extensionRelay.status();
+    case "runtime.relay_begin_pairing":
+      return extensionRelay.beginPairing();
     case "runtime.test_diagnostics":
       if (process.env.CODEX_BROWSER_TEST_MODE !== "1") throw namedError("TEST_MODE_REQUIRED", "Runtime diagnostics are available only to isolated release tests.");
       return adapter.diagnostics();
@@ -648,6 +668,7 @@ async function handle(method: string, params: Record<string, unknown>): Promise<
       return results;
     }
     case "paper.download": {
+      if (activeRuntimeKind === "edge-extension") throw namedError("UNAVAILABLE_IN_RELAY", "Managed download and PDF import are unavailable in ordinary Edge relay mode. Use Edge's visible download UI or switch to external-edge.");
       const tabId = await resolveTabId(params.tabId);
       const generation = begin("下载文件");
       const task = createTask("下载文件", "受管 Edge 下载");
@@ -694,6 +715,7 @@ async function handle(method: string, params: Record<string, unknown>): Promise<
     case "storage.summary":
       return edgeStorageSummary(params.tabId ? await resolveTabId(params.tabId) : undefined);
     case "storage.request_action": {
+      if (activeRuntimeKind === "edge-extension") throw namedError("UNAVAILABLE_IN_RELAY", "Codex Browser cannot clear or reset the user's ordinary Edge profile. Use Edge settings directly.");
       const action = String(params.action || "") as BrowserDataAction;
       if (!["clear_site", "clear_all", "reset_profile"].includes(action)) throw namedError("INVALID_DATA_ACTION", "Unsupported browser data action.");
       const tabId = action === "clear_site" ? await resolveTabId(params.tabId) : undefined;
@@ -864,6 +886,7 @@ async function shutdown(): Promise<void> {
       console.error(`[edge-broker] shutdown-error ${safe.name}: ${safe.message}`);
     }
   });
+  await extensionRelay.stop().catch(() => undefined);
   if (process.env.CODEX_BROWSER_EDGE_DEBUG === "1") console.error("[edge-broker] shutdown-edge-finished");
   if (controlCenterProcess && controlCenterProcess.exitCode === null) controlCenterProcess.kill();
   if (temporaryProfile && !preserveTemporaryProfile) removeManagedEdgeProfile(profileDir, runtimeRoot);

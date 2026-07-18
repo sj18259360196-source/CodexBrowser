@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Codex Browser Edge Relay",
+  "version": "0.1.0",
+  "description": "Connects user-authorized ordinary Edge tabs to the local Codex Browser policy broker.",
+  "permissions": ["debugger", "tabs", "storage", "downloads", "alarms"],
+  "host_permissions": ["http://127.0.0.1:32192/*"],
+  "background": { "service_worker": "service-worker.js" },
+  "action": { "default_title": "Codex Browser Edge Relay", "default_popup": "popup.html" }
+}

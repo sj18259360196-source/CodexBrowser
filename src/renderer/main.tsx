@@ -778,7 +778,7 @@ function App() {
 
         <button type="button" className={`runtime-pill ${statusClass}`} title={`${viewState.runtimeInfo.label} · ${viewState.runtimeInfo.detail}`} onClick={() => setRuntimeOpen(true)}>
           <span className="runtime-dot" />
-          <span>{viewState.runtimeInfo.kind === "external-edge" ? "Edge" : "Legacy"} · {statusLabel(viewState.runtimeStatus)}</span>
+          <span>{viewState.runtimeInfo.kind === "edge-extension" ? "Edge Relay" : viewState.runtimeInfo.kind === "external-edge" ? "Edge" : "Legacy"} · {statusLabel(viewState.runtimeStatus)}</span>
         </button>
         <IconButton
           label={viewState.runtimeStatus === "paused" ? "继续 Codex 控制" : "暂停 Codex 控制"}
@@ -1139,7 +1139,8 @@ function App() {
             </div>
             <section className="runtime-settings-section">
               <header><Settings size={16} /><div><strong>设置</strong><span>切换 runtime 后需要重新启动 Codex Browser</span></div></header>
-              <label className="runtime-setting-row"><div><strong>首选 runtime</strong><span>正常使用独立 Edge；legacy 仅用于故障排查</span></div><select value={viewState.runtimeSettings.preferredRuntime} disabled={busyAction !== null} onChange={(event) => void changeRuntimeSettings({ preferredRuntime: event.target.value as AppState["runtimeSettings"]["preferredRuntime"] })}><option value="external-edge">external-edge</option><option value="electron-legacy">electron-legacy</option></select></label>
+              <label className="runtime-setting-row"><div><strong>首选 runtime</strong><span>独立 Edge 最安全；扩展中继使用你的普通 Edge Profile</span></div><select value={viewState.runtimeSettings.preferredRuntime} disabled={busyAction !== null} onChange={(event) => void changeRuntimeSettings({ preferredRuntime: event.target.value as AppState["runtimeSettings"]["preferredRuntime"] })}><option value="external-edge">external-edge</option><option value="edge-extension">edge-extension</option><option value="electron-legacy">electron-legacy</option></select></label>
+              <div className="runtime-setting-row fixed"><div><strong>普通 Edge 扩展中继</strong><span>{viewState.edgeRelay?.connected ? "扩展已连接到用户 Profile" : viewState.edgeRelay?.paired ? "已配对，等待普通 Edge 扩展连接" : viewState.edgeRelay?.pairingWindowOpen ? "两分钟配对窗口已开启，请点击 Edge 扩展图标完成连接" : "先加载扩展，再开启配对窗口"}</span></div><div className="runtime-actions"><button type="button" disabled={!bridge || busyAction !== null} onClick={() => bridge ? void invokeDesktop("relay-folder", (desktopBridge) => desktopBridge.openEdgeRelayExtensionFolder()) : undefined}>打开扩展目录</button><button type="button" disabled={!bridge || busyAction !== null} onClick={() => bridge ? void invokeDesktop("relay-pair", (desktopBridge) => desktopBridge.beginEdgeRelayPairing()) : undefined}>开启配对</button></div></div>
               <label className="runtime-setting-row"><div><strong>关闭控制中心时保持 Edge 运行</strong><span>保留网页和下载状态，稍后可重新打开控制中心</span></div><input type="checkbox" checked={viewState.runtimeSettings.keepEdgeRunningOnControlCenterClose} disabled={busyAction !== null || viewState.runtimeInfo.legacy} onChange={(event) => void changeRuntimeSettings({ keepEdgeRunningOnControlCenterClose: event.target.checked })} /></label>
               <label className="runtime-setting-row"><div><strong>系统通知</strong><span>仅在人工接管或高风险确认时通知一次</span></div><input type="checkbox" checked={viewState.runtimeSettings.notificationsEnabled} disabled={busyAction !== null} onChange={(event) => void changeRuntimeSettings({ notificationsEnabled: event.target.checked })} /></label>
               <div className="runtime-setting-row fixed"><div><strong>下载与文献</strong><span>下载保存在项目管理目录；PDF 仅在明确请求时导入文献库</span></div><span>受管</span></div>

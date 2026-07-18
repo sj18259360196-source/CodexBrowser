@@ -31,6 +31,8 @@ import type {
   BrowserTabList,
 } from "./browser-adapter";
 import type { CdpEvent, CdpTransport } from "./cdp-transport";
+import { isCapturablePdfResponse } from "./pdf-response";
+import { isVerificationProviderFrameUrl } from "./verification-boundary";
 
 interface TargetInfo {
   targetId: string;
@@ -286,20 +288,32 @@ export class EdgeBrowserAdapter implements BrowserAdapter {
         }>("Fetch.requestPaused", { sessionId: tab.sessionId, timeoutMs: 15_000 });
         const navigation = navigatePage();
         const paused = await pausedPromise;
-        const body = await this.transport.send<{ body: string; base64Encoded: boolean }>("Fetch.getResponseBody", { requestId: paused.requestId }, tab.sessionId);
-        const bytes = body.base64Encoded ? Buffer.from(body.body, "base64") : Buffer.from(body.body, "binary");
-        await this.transport.send("Fetch.fulfillRequest", {
-          requestId: paused.requestId,
-          responseCode: paused.responseStatusCode || 200,
-          responseHeaders: paused.responseHeaders || [],
-          body: bytes.toString("base64"),
-        }, tab.sessionId);
-        if (bytes.subarray(0, 5).toString("ascii") === "%PDF-") {
-          this.loadedPdfByTab.set(tabId, { bytes, url });
-        } else if (isLoopbackUrl(url)) {
-          const fixture = await fetch(url, { redirect: "error" });
-          const fixtureBytes = Buffer.from(await fixture.arrayBuffer());
-          if (fixture.ok && fixtureBytes.subarray(0, 5).toString("ascii") === "%PDF-") this.loadedPdfByTab.set(tabId, { bytes: fixtureBytes, url });
+        const responseStatus = paused.responseStatusCode || 0;
+        const responseHeaders = paused.responseHeaders || [];
+        if (isCapturablePdfResponse(responseStatus, responseHeaders)) {
+          const body = await this.transport.send<{ body: string; base64Encoded: boolean }>("Fetch.getResponseBody", { requestId: paused.requestId }, tab.sessionId);
+          const bytes = body.base64Encoded ? Buffer.from(body.body, "base64") : Buffer.from(body.body, "binary");
+          await this.transport.send("Fetch.fulfillRequest", {
+            requestId: paused.requestId,
+            responseCode: responseStatus,
+            responseHeaders,
+            body: bytes.toString("base64"),
+          }, tab.sessionId);
+          if (bytes.subarray(0, 5).toString("ascii") === "%PDF-") {
+            this.loadedPdfByTab.set(tabId, { bytes, url });
+          } else if (isLoopbackUrl(url)) {
+            const fixture = await fetch(url, { redirect: "error" });
+            const fixtureBytes = Buffer.from(await fixture.arrayBuffer());
+            if (fixture.ok && fixtureBytes.subarray(0, 5).toString("ascii") === "%PDF-") this.loadedPdfByTab.set(tabId, { bytes: fixtureBytes, url });
+          }
+        } else {
+          // Preserve publisher authentication, redirects, Set-Cookie handling,
+          // and Cloudflare challenge navigation exactly as Edge received them.
+          try {
+            await this.transport.send("Fetch.continueResponse", { requestId: paused.requestId }, tab.sessionId);
+          } catch {
+            await this.transport.send("Fetch.continueRequest", { requestId: paused.requestId }, tab.sessionId);
+          }
         }
         result = await navigation;
       } finally {
@@ -405,8 +419,7 @@ export class EdgeBrowserAdapter implements BrowserAdapter {
       return this.actionResult(action, tab, beforeUrl, "Scrolled the page.");
     }
     if (action.action === "press" && !action.ref) {
-      await this.activateForInput(tab);
-      await this.pressKey(tab, action.key);
+      await this.withInputFocus(tab, () => this.pressKey(tab, action.key));
       return this.actionResult(action, tab, beforeUrl, `Pressed ${action.key}.`);
     }
     const ref = "ref" in action ? action.ref : undefined;
@@ -429,22 +442,23 @@ export class EdgeBrowserAdapter implements BrowserAdapter {
       await this.click(tab, x, y, action.action === "double_click" ? 2 : 1);
     } else if (action.action === "fill") {
       await this.click(tab, x, y, 1);
-      await this.activateForInput(tab);
-      await this.selectAll(tab);
-      await this.transport.send("Input.insertText", { text: action.text }, tab.sessionId);
+      await this.withInputFocus(tab, async () => {
+        await this.selectAll(tab);
+        await this.transport.send("Input.insertText", { text: action.text }, tab.sessionId);
+      });
     } else if (action.action === "press") {
       await this.click(tab, x, y, 1);
-      await this.activateForInput(tab);
-      await this.pressKey(tab, action.key);
+      await this.withInputFocus(tab, () => this.pressKey(tab, action.key));
     } else if (action.action === "check" || action.action === "uncheck") {
       const desired = action.action === "check";
       if (Boolean(probe.checked) !== desired) await this.click(tab, x, y, 1);
     } else if (action.action === "select") {
       if (probe.optionIndex == null || probe.optionIndex < 0) throw namedError("INVALID_ACTION", "The requested option was not found.");
-      await this.activateForInput(tab);
-      await this.focusReference(reference);
-      await this.pressKey(tab, "Home");
-      for (let index = 0; index < probe.optionIndex; index += 1) await this.pressKey(tab, "ArrowDown");
+      await this.withInputFocus(tab, async () => {
+        await this.focusReference(reference);
+        await this.pressKey(tab, "Home");
+        for (let index = 0; index < probe.optionIndex!; index += 1) await this.pressKey(tab, "ArrowDown");
+      });
     }
     await new Promise((resolve) => setTimeout(resolve, 80));
     await this.refreshTabInfo(tabId).catch(() => undefined);
@@ -933,6 +947,14 @@ export class EdgeBrowserAdapter implements BrowserAdapter {
     const results: SnapshotFrameResult[] = [];
     for (let frameIndex = 0; frameIndex < frames.length; frameIndex += 1) {
       const frame = frames[frameIndex];
+      const frameUrl = tab.frameUrls.get(frame.id) || "";
+      if (frameIndex > 0 && isVerificationProviderFrameUrl(frameUrl)) {
+        // Keep Turnstile/CAPTCHA frames visually intact and human-operated. In
+        // particular, do not create an isolated world in a provider frame just
+        // to discover controls that policy would reject as sensitive anyway.
+        results.push({ title: "", url: "", text: "", elements: [], links: [], forms: [], authRequired: true });
+        continue;
+      }
       try {
         if (!tab.sessionId) throw namedError("STALE_SNAPSHOT", "The page session is unavailable after reconnect.");
         const contextId = await this.frameContext(tab, frame.id);
@@ -1362,10 +1384,18 @@ export class EdgeBrowserAdapter implements BrowserAdapter {
     await this.transport.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft" }, tab.sessionId);
   }
 
-  private async activateForInput(tab: TabRecord): Promise<void> {
+  private async withInputFocus(tab: TabRecord, operation: () => Promise<void>): Promise<void> {
     await this.transport.send("Target.activateTarget", { targetId: tab.targetId });
     await this.transport.send("Page.bringToFront", {}, tab.sessionId);
     await this.transport.send("Emulation.setFocusEmulationEnabled", { enabled: true }, tab.sessionId);
+    try {
+      await operation();
+    } finally {
+      // Focus emulation is only needed while dispatching the trusted input. A
+      // persistent synthetic focus signal can make later verification widgets
+      // observe a browser state that disagrees with the visible window.
+      await this.transport.send("Emulation.setFocusEmulationEnabled", { enabled: false }, tab.sessionId).catch(() => undefined);
+    }
   }
 
   private async pressKey(tab: TabRecord, key: string): Promise<void> {

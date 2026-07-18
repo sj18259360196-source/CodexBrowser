@@ -24,7 +24,7 @@ export function resolveCodexBrowserProductRoot(environment: NodeJS.ProcessEnv = 
 function validated(value: unknown): BrowserRuntimeSettings {
   const input = value && typeof value === "object" ? value as Partial<BrowserRuntimeSettings> : {};
   return {
-    preferredRuntime: input.preferredRuntime === "electron-legacy" ? "electron-legacy" : "external-edge",
+    preferredRuntime: input.preferredRuntime === "electron-legacy" || input.preferredRuntime === "edge-extension" ? input.preferredRuntime : "external-edge",
     keepEdgeRunningOnControlCenterClose: input.keepEdgeRunningOnControlCenterClose !== false,
     sessionRecoveryEnabled: input.sessionRecoveryEnabled === true,
     notificationsEnabled: input.notificationsEnabled !== false,
