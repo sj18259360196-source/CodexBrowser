@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Browser Advanced Control Test</title>
+    <style>
+      :root { color-scheme: light; font-family: "Segoe UI", sans-serif; color: #202421; background: #eef2f0; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      main { width: min(900px, calc(100% - 40px)); margin: 32px auto; }
+      h1 { margin: 0 0 8px; font-size: 26px; }
+      .lede { margin: 0 0 24px; color: #5f6963; }
+      section { padding: 20px 0; border-top: 1px solid #cbd4cf; }
+      section:first-of-type { border-top: 0; }
+      h2 { margin: 0 0 14px; font-size: 17px; }
+      .row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+      label { display: grid; gap: 6px; font-size: 13px; font-weight: 650; }
+      input, button { min-height: 38px; border-radius: 5px; font: inherit; }
+      input[type="text"], input[type="password"] { width: 250px; border: 1px solid #afbbb5; padding: 0 10px; background: white; }
+      button { border: 1px solid #9eaaa4; padding: 0 14px; color: #202421; background: white; font-weight: 650; }
+      button:hover { border-color: #12634a; background: #e8f3ef; }
+      output { display: block; min-height: 24px; margin-top: 12px; color: #315d4d; font: 600 13px/1.5 Consolas, monospace; }
+      .check-label { display: inline-flex; grid-auto-flow: column; align-items: center; gap: 8px; }
+      #hover-target { width: 150px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Advanced browser controls</h1>
+      <p class="lede">Deterministic local fixture for trusted pointer input, tabs, dialogs, and human assistance.</p>
+
+      <section id="auth-section">
+        <h2>Authentication boundary</h2>
+        <div id="auth-form-host"></div>
+        <template id="auth-form-template">
+          <form id="auth-form">
+            <div class="row">
+              <label>Username<input id="username" name="username" type="text" autocomplete="username" aria-label="University username" /></label>
+              <label>Password<input id="password" name="password" type="password" autocomplete="current-password" aria-label="University password" /></label>
+              <button id="login" type="submit">Sign in</button>
+            </div>
+          </form>
+        </template>
+        <button id="remove-auth" type="button">Remove authentication fixture</button>
+        <output id="auth-status">Authentication: not requested</output>
+      </section>
+
+      <section>
+        <h2>Pointer controls</h2>
+        <div class="row">
+          <label class="check-label">
+            <input id="supplement" type="checkbox" aria-label="Include supplementary material" />
+            Include supplementary material
+          </label>
+          <button id="hover-target" type="button" aria-label="Hover target">Hover target</button>
+          <button id="double-target" type="button" aria-label="Double click target">Double click target</button>
+        </div>
+        <output id="checkbox-status">Checkbox: unchecked</output>
+        <output id="hover-status">Hover: waiting</output>
+        <output id="double-status">Double click: 0</output>
+      </section>
+
+      <section>
+        <h2>Popup and opener</h2>
+        <button id="open-popup" type="button">Open popup</button>
+        <output id="popup-status">Popup: waiting</output>
+      </section>
+
+      <section>
+        <h2>JavaScript dialogs</h2>
+        <div class="row">
+          <button id="open-alert" type="button">Open alert</button>
+          <button id="open-confirm" type="button">Open confirm</button>
+          <button id="arm-beforeunload" type="button">Arm before unload</button>
+          <a id="beforeunload-nav" href="/popup-test.html">Navigate away</a>
+          <button id="open-sensitive-dialog" type="button">Open sensitive dialog</button>
+        </div>
+        <output id="alert-status">Alert: waiting</output>
+        <output id="confirm-status">Confirm: waiting</output>
+        <output id="beforeunload-status">Before unload: waiting</output>
+        <output id="sensitive-dialog-status">Sensitive dialog: waiting</output>
+      </section>
+    </main>
+
+    <script>
+      const authStatus = document.querySelector("#auth-status");
+      const authFormHost = document.querySelector("#auth-form-host");
+      const authFormTemplate = document.querySelector("#auth-form-template");
+      const deferredAuth = new URLSearchParams(location.search).get("deferAuth") === "1";
+      const checkbox = document.querySelector("#supplement");
+      const checkboxStatus = document.querySelector("#checkbox-status");
+      const hoverStatus = document.querySelector("#hover-status");
+      const doubleStatus = document.querySelector("#double-status");
+      const popupStatus = document.querySelector("#popup-status");
+      const beforeUnloadStatus = document.querySelector("#beforeunload-status");
+      let doubleClicks = 0;
+      let authFormMounted = false;
+      let authResolved = false;
+      let handoffRevision = 0;
+      let beforeUnloadArmed = false;
+      let beforeUnloadPrompts = 0;
+
+      const mountAuthForm = () => {
+        if (authResolved || authFormMounted) return;
+        authFormHost.replaceChildren(authFormTemplate.content.cloneNode(true));
+        authFormMounted = true;
+        authStatus.textContent = "Authentication: waiting";
+        authFormHost.querySelector("#auth-form").addEventListener("submit", (event) => {
+          event.preventDefault();
+          authStatus.textContent = `Authentication: submitted as ${authFormHost.querySelector("#username").value}`;
+        });
+      };
+
+      const resolveAuthFixture = () => {
+        if (authResolved) return;
+        authResolved = true;
+        authFormMounted = false;
+        authFormHost.replaceChildren();
+        authStatus.textContent = "Authentication: resolved";
+        if (deferredAuth) history.replaceState({}, "", "/control-auth-completed?deferAuth=1");
+      };
+
+      if (!deferredAuth) mountAuthForm();
+      document.querySelector("#remove-auth").addEventListener("click", () => {
+        document.cookie = "codex_control_auth_resolved=true; path=/; SameSite=Lax";
+        resolveAuthFixture();
+      });
+      checkbox.addEventListener("change", (event) => {
+        checkboxStatus.textContent = `Checkbox: ${checkbox.checked ? "checked" : "unchecked"} (${event.isTrusted ? "trusted" : "synthetic"})`;
+      });
+      document.querySelector("#hover-target").addEventListener("pointerenter", (event) => {
+        hoverStatus.textContent = `Hover: entered (${event.isTrusted ? "trusted" : "synthetic"})`;
+      });
+      document.querySelector("#double-target").addEventListener("dblclick", (event) => {
+        doubleClicks += 1;
+        doubleStatus.textContent = `Double click: ${doubleClicks} (${event.isTrusted ? "trusted" : "synthetic"})`;
+      });
+      document.querySelector("#open-popup").addEventListener("click", () => {
+        popupStatus.textContent = "Popup: opening";
+        window.open("/popup-test.html", "codex-control-popup", "popup,width=520,height=420");
+      });
+      window.addEventListener("message", (event) => {
+        if (event.origin !== location.origin || event.data?.type !== "codex-popup-ready") return;
+        popupStatus.textContent = `Popup: ${event.data.message}`;
+      });
+
+      document.querySelector("#open-alert").addEventListener("click", () => {
+        window.alert("Codex control alert");
+        document.querySelector("#alert-status").textContent = "Alert: closed";
+      });
+      document.querySelector("#open-confirm").addEventListener("click", () => {
+        const accepted = window.confirm("Codex control confirm");
+        document.querySelector("#confirm-status").textContent = `Confirm: ${accepted ? "accepted" : "dismissed"}`;
+      });
+      document.querySelector("#arm-beforeunload").addEventListener("click", () => {
+        beforeUnloadArmed = true;
+        beforeUnloadStatus.textContent = "Before unload: armed";
+      });
+      window.addEventListener("beforeunload", (event) => {
+        if (!beforeUnloadArmed) return;
+        beforeUnloadPrompts += 1;
+        beforeUnloadStatus.textContent = `Before unload: prompted ${beforeUnloadPrompts}`;
+        event.preventDefault();
+        event.returnValue = "Codex Browser beforeunload";
+      });
+      document.querySelector("#open-sensitive-dialog").addEventListener("click", () => {
+        const accepted = window.confirm("Password confirmation required");
+        document.querySelector("#sensitive-dialog-status").textContent = `Sensitive dialog: ${accepted ? "accepted" : "dismissed"}`;
+      });
+
+      const pollControlSignal = async () => {
+        try {
+          const response = await fetch("/__codex_control_signal", { cache: "no-store" });
+          if (response.ok) {
+            const signal = await response.json();
+            if (signal.authVisible === true) mountAuthForm();
+            if (signal.authResolved === true) resolveAuthFixture();
+            if (Number(signal.handoffRevision) > handoffRevision) {
+              handoffRevision = Number(signal.handoffRevision);
+              let evidence = document.querySelector("#manual-handoff-evidence");
+              if (!evidence) {
+                evidence = document.createElement("output");
+                evidence.id = "manual-handoff-evidence";
+                document.querySelector("main").append(evidence);
+              }
+              evidence.textContent = `Manual handoff evidence: ${handoffRevision}`;
+              document.title = `Codex Browser handoff ${handoffRevision}`;
+            }
+          }
+        } catch {
+          // The deterministic smoke server can be briefly unavailable during cleanup.
+        }
+        setTimeout(pollControlSignal, 80);
+      };
+      if (deferredAuth) void pollControlSignal();
+    </script>
+  </body>
+</html>

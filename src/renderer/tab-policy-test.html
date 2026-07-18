@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Phase 0 tab policy fixture</title>
+    <style>
+      :root { color-scheme: light; font-family: "Segoe UI", sans-serif; color: #202421; background: #eef2f0; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      main { width: min(720px, calc(100% - 40px)); margin: 48px auto; }
+      section { padding: 20px 0; border-top: 1px solid #cbd4cf; }
+      section:first-child { border-top: 0; }
+      h1, h2 { margin: 0 0 12px; }
+      p, output { line-height: 1.5; }
+      form, .row { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+      label { display: grid; gap: 6px; font-size: 13px; font-weight: 650; }
+      input, button { min-height: 38px; border-radius: 5px; font: inherit; }
+      input { width: 260px; border: 1px solid #afbbb5; padding: 0 10px; background: white; }
+      button { border: 1px solid #9eaaa4; padding: 0 14px; color: #202421; background: white; font-weight: 650; }
+      output { display: block; min-height: 24px; margin-top: 12px; color: #315d4d; font: 600 13px/1.5 Consolas, monospace; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section id="auth-fixture">
+        <h1>Human authentication required</h1>
+        <p>The test page waits for visible user completion before browser control may resume.</p>
+        <form id="auth-form">
+          <span>Password</span>
+          <input id="password" type="password" autocomplete="current-password" />
+          <button type="submit">Continue</button>
+        </form>
+        <output id="auth-status">Authentication state: waiting for user</output>
+      </section>
+
+      <section id="verified-fixture" hidden>
+        <h1>Authentication completed</h1>
+        <p id="completion-evidence">Visible completion evidence: confirmed by the local test service</p>
+        <div class="row">
+          <label>
+            Post-verification note
+            <input id="post-verification-note" type="text" />
+          </label>
+          <button id="post-verification-action" type="button">Record verified note</button>
+        </div>
+        <output id="post-verification-status">Mutation after verification: waiting</output>
+      </section>
+
+      <section id="ordinary-fixture" hidden>
+        <h1 id="ordinary-title">Ordinary tab workspace</h1>
+        <p>Routine actions on this tab remain independent from another tab's user boundary.</p>
+        <div class="row">
+          <label>
+            Research query
+            <input id="ordinary-input" type="text" aria-label="Research query" />
+          </label>
+          <button id="ordinary-action" type="button">Run ordinary action</button>
+        </div>
+        <output id="ordinary-status">Ordinary action: waiting</output>
+      </section>
+    </main>
+
+    <script>
+      const ordinaryMode = location.pathname.includes("ordinary");
+      const authFixture = document.querySelector("#auth-fixture");
+      const verifiedFixture = document.querySelector("#verified-fixture");
+      const ordinaryFixture = document.querySelector("#ordinary-fixture");
+
+      if (ordinaryMode) {
+        authFixture.remove();
+        ordinaryFixture.hidden = false;
+        if (location.pathname.includes("ordinary-next")) {
+          document.title = "Phase 0 ordinary next page";
+          document.querySelector("#ordinary-title").textContent = "Ordinary tab next page";
+        }
+      } else {
+        const password = document.querySelector("#password");
+        password.value = "fixture-only-sensitive-value";
+        document.querySelector("#auth-form").addEventListener("submit", (event) => event.preventDefault());
+
+        const applyCompletion = () => {
+          if (verifiedFixture.hidden === false) return;
+          document.querySelector("#auth-form")?.remove();
+          authFixture.hidden = true;
+          verifiedFixture.hidden = false;
+          document.title = "Phase 0 verified page";
+          history.replaceState({}, "", "/auth-completed");
+        };
+
+        const pollCompletion = async () => {
+          try {
+            const response = await fetch("/__tab_policy_signal", { cache: "no-store" });
+            if (response.ok && (await response.json()).complete === true) {
+              applyCompletion();
+              return;
+            }
+          } catch {
+            // The deterministic smoke server can be briefly unavailable during cleanup.
+          }
+          setTimeout(pollCompletion, 80);
+        };
+        void pollCompletion();
+      }
+
+      document.querySelector("#ordinary-action").addEventListener("click", () => {
+        const value = document.querySelector("#ordinary-input").value;
+        document.querySelector("#ordinary-status").textContent = `Ordinary action: ${value || "empty"}`;
+      });
+      document.querySelector("#post-verification-action").addEventListener("click", () => {
+        const value = document.querySelector("#post-verification-note").value;
+        document.querySelector("#post-verification-status").textContent = `Mutation after verification: ${value || "empty"}`;
+      });
+    </script>
+  </body>
+</html>

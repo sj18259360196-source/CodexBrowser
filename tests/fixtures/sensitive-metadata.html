@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Metadata fixture</title>
+    <style>
+      body { margin: 0; padding: 44px; font: 16px Arial, sans-serif; background: #f5f7f6; color: #17201b; }
+      main { width: 640px; padding: 24px; background: white; border: 1px solid #aeb9b3; }
+      #metadata-mirror { display: inline-block; margin: 16px 0; padding: 12px; background: #fff4c7; font: 20px Consolas, monospace; }
+      button { display: block; width: 220px; height: 44px; border: 0; color: white; background: #185c43; }
+      #viewport-probe { position: fixed; inset: 0 0 auto 0; width: 100vw; height: 1px; opacity: .01; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="viewport-probe" tabindex="0" aria-label="Viewport scale probe"></div>
+    <main>
+      <h1>Metadata fixture ready</h1>
+      <input id="metadata-value" type="hidden" name="hidden" value="Mercury-62Lq!" />
+      <div id="metadata-mirror" tabindex="0" aria-label="Mirrored page text">Mercury-62Lq!</div>
+      <button id="safe-action" type="button">Run safe action</button>
+      <p id="result">Waiting</p>
+    </main>
+    <script>
+      document.title = document.getElementById('metadata-value').value;
+      document.getElementById('safe-action').addEventListener('click', () => {
+        document.getElementById('result').textContent = 'Safe action completed';
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sensitive field fixture</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Arial, sans-serif; background: #f1f4f2; color: #17201b; }
+      main { width: min(940px, calc(100% - 32px)); margin: 18px auto; padding: 18px; background: white; border: 1px solid #b8c2bc; }
+      h1 { margin: 0 0 10px; font-size: 22px; }
+      .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+      label, .field { display: grid; gap: 4px; font-size: 12px; font-weight: 700; }
+      input, button, canvas { width: 100%; min-width: 0; height: 42px; border: 1px solid #7d8c83; background: #fff; }
+      input { padding: 0 8px; }
+      button { color: white; background: #185c43; font-weight: 700; }
+      canvas { background: #f6df72; }
+      .mirror { margin: 10px 0; padding: 8px; border: 1px solid #d3dad6; background: #f8faf9; font: 12px/1.35 Consolas, monospace; }
+      .frames { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      iframe { width: 100%; height: 150px; border: 2px solid #6f7f76; background: white; }
+      #viewport-probe { position: fixed; inset: 0 0 auto 0; width: 100vw; height: 1px; opacity: .01; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="viewport-probe" tabindex="0" aria-label="Viewport scale probe"></div>
+    <main>
+      <h1>Sensitive field fixture ready</h1>
+      <form action="/never-submit" method="post">
+        <div class="grid">
+          <div class="field">
+            Unlabelled field
+            <input
+              id="field-a"
+              type="password"
+              value="Vega-41Qx!"
+              role="Vega-41Qx!"
+              data-codex-browser-ref="Vega-41Qx!"
+            />
+          </div>
+          <label>Current credential<input id="field-b" type="text" autocomplete="current-password" value="Orion-82Lm!" /></label>
+          <label>New credential<input id="field-c" type="text" autocomplete="new-password" value="Lyra-73Np!" /></label>
+          <label>One-time code<input id="field-d" type="text" autocomplete="one-time-code" value="Draco-64Rt!" /></label>
+          <label id="security-label">Security code<input id="field-e" type="text" aria-labelledby="security-label" value="Altair-55Hs!" /></label>
+          <label>API field<input id="field-f" type="text" name="api_key" value="Deneb-46Jv!" /></label>
+          <label>Captcha answer<input id="field-g" type="text" name="captcha_response" value="Solis-37Kw!" /></label>
+          <label>File chooser<input id="field-h" type="file" /></label>
+          <label>Account name<input id="field-i" type="text" autocomplete="username" value="normal-user" /></label>
+          <label>Autofilled credential<input id="field-j" type="password" autocomplete="current-password" /></label>
+          <canvas id="visual-check" class="captcha-art" tabindex="0" role="img" aria-label="Visual challenge"></canvas>
+          <button id="login-submit" type="submit">Sign in</button>
+        </div>
+        <input id="field-hidden" type="hidden" name="csrf_token" value="Cygnus-28Mx!" />
+      </form>
+      <div id="value-mirror" class="mirror" tabindex="0" aria-label="Mirrored sensitive values">
+        Vega-41Qx! Orion-82Lm! Lyra-73Np! Draco-64Rt! Altair-55Hs! Deneb-46Jv! Solis-37Kw! Cygnus-28Mx! Polaris-19Bz!
+      </div>
+      <div class="frames">
+        <iframe src="/sensitive-frame.html" title="Embedded verification frame"></iframe>
+        <iframe src="__CROSS_ORIGIN_URL__" title="External content frame" tabindex="0"></iframe>
+      </div>
+    </main>
+    <script>
+      const autofilled = document.getElementById('field-j');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(autofilled, 'Polaris-19Bz!');
+      autofilled.dispatchEvent(new Event('input', { bubbles: true }));
+      autofilled.dataset.autofilled = 'true';
+      document.title = autofilled.value;
+
+      const canvas = document.getElementById('visual-check');
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#f6df72';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#17201b';
+      context.font = 'bold 28px sans-serif';
+      context.fillText('C7Q9', 78, 34);
+    </script>
+  </body>
+</html>
