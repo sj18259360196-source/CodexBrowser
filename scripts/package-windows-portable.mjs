@@ -57,6 +57,7 @@ for (const file of [
   "README.md",
   "start-local.cmd",
   "scripts/start-desktop.cmd",
+  "scripts/check-node-version.mjs",
   "scripts/start-runtime.mjs",
   `docs/release/RELEASE_NOTES_${version}.md`,
 ]) await copy(file);

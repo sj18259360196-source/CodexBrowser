@@ -10,6 +10,7 @@ Codex Browser 1.1.0 adds an opt-in ordinary Microsoft Edge extension relay while
 - Stopped inspecting verification-provider iframes and bounded focus emulation around visible human challenges.
 - Captures only responses confirmed as PDFs; Cloudflare HTML, redirects, authentication pages, and errors now pass through untouched.
 - Fixed the local launcher so a newly spawned broker receives the selected runtime instead of always forcing `external-edge`.
+- Fixed the Windows launcher incorrectly rejecting Node.js 24 and newer because of fragile batch-shell metacharacter escaping.
 
 ## Install And Start
 

@@ -38,8 +38,10 @@ try {
     "dist/mcp/index.mjs",
     "extension/edge-relay/manifest.json",
     "node_modules/electron/dist/electron.exe",
+    "scripts/check-node-version.mjs",
     "unins000.exe",
   ]) await access(path.join(installDir, required));
+  run(process.execPath, [path.join(installDir, "scripts", "check-node-version.mjs")]);
   const manifest = JSON.parse(await readFile(path.join(installDir, "release-manifest.json"), "utf8"));
   if (manifest.version !== packageJson.version || manifest.platform !== "win32" || manifest.architecture !== "x64") {
     throw new Error("Installed release manifest does not match the package version and platform.");
@@ -51,7 +53,7 @@ try {
   } catch (error) {
     if (error instanceof Error && error.message.includes("left installed")) throw error;
   }
-  console.log(JSON.stringify({ version: manifest.version, installed: true, extensionIncluded: true, uninstalled: true }, null, 2));
+  console.log(JSON.stringify({ version: manifest.version, installed: true, nodeVersionAccepted: process.versions.node, extensionIncluded: true, uninstalled: true }, null, 2));
 } finally {
   await rm(testRoot, { recursive: true, force: true });
 }

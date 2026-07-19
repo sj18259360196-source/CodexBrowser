@@ -9,7 +9,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-node -e "const [a,b]=process.versions.node.split('.').map(Number);process.exit(a^>22^|^(a===22^&^&b^>=13^)^?0:1)" >nul 2>nul
+node scripts\check-node-version.mjs >nul 2>nul
 if errorlevel 1 (
   echo Codex Browser requires Node.js 22.13 or newer.
   echo Current version:

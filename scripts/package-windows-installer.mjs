@@ -65,6 +65,7 @@ try {
   await rm(checksumPath, { force: true });
   const iscc = await findIscc();
   run(iscc, [
+    "/Qp",
     `/DMyAppVersion=${version}`,
     `/DMyAppVersionInfo=${versionInfo}`,
     `/DSourceDir=${sourceDir}`,

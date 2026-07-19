@@ -27,6 +27,7 @@
     "test:policy": "node --test --experimental-strip-types tests/policy-engine.test.ts tests/action-authorization.test.ts",
     "test:runtime-selection": "node --test --experimental-strip-types tests/runtime-selection.test.ts",
     "test:edge-relay": "node --test --experimental-strip-types tests/extension-relay-server.test.ts",
+    "test:launcher": "node --test tests/node-version.test.mjs",
     "test:release-info": "node --test --experimental-strip-types tests/release-info.test.ts",
     "smoke:mcp": "node scripts/mcp-smoke.mjs",
     "smoke:actions": "node scripts/browser-action-smoke.mjs",

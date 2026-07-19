@@ -1,5 +1,6 @@
 # Codex Browser Work Log
 
+- [2026-07-19 06 - Node version launcher fix](docs/worklogs/2026-07-19-06-node-version-launcher.md): Replaced fragile batch metacharacter version logic with a tested Node checker so Node 24 and future supported versions launch correctly.
 - [2026-07-19 05 - Windows installer packaging](docs/worklogs/2026-07-19-05-windows-installer.md): Added a repeatable per-user Windows EXE installer with shortcuts, uninstaller, checksum, and silent install/uninstall verification.
 - [2026-07-19 04 - Release 1.1.0 packaging and publication](docs/worklogs/2026-07-19-04-release-1.1.0.md): Versioned, packaged, verified, and published the ordinary Edge relay and challenge/PDF compatibility release.
 - [2026-07-19 03 - Ordinary Edge extension relay](docs/worklogs/2026-07-19-03-edge-extension-relay.md): Added an authenticated MV3 extension relay runtime for controlling tabs in the user's ordinary Edge profile while retaining CodexBrowser's existing action policy.
