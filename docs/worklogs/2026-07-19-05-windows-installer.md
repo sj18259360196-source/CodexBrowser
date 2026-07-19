@@ -27,7 +27,8 @@ Add a standard Windows x64 EXE installer for Codex Browser 1.1.0 in addition to 
 - Inno Setup 6.7.3 compiled `CodexBrowser-1.1.0-win-x64-setup.exe`, 115,307,143 bytes.
 - Installer SHA-256: `6d5c4536ef111fca9a02ccda1f518610ccd466896c8cfe68657f50f8b7bb2543`.
 - `npm run smoke:installer`: passed. Silent per-user installation contained the application, broker, MCP, Electron runtime, and Edge relay extension; silent uninstall removed installed application files.
-- Git commit and GitHub Release upload remain pending the final publication steps.
+- Commit `bd17715` was pushed to the existing `agent/edge-extension-relay-1.1.0` PR branch.
+- The 1.1.0 draft GitHub Release now contains the installer EXE, installer checksum, refreshed portable ZIP, and portable checksum. GitHub reports all four assets in `uploaded` state and reports the EXE digest matching the local SHA-256.
 
 ## Known Issues
 
@@ -36,4 +37,4 @@ Add a standard Windows x64 EXE installer for Codex Browser 1.1.0 in addition to 
 
 ## Next Steps
 
-- Commit and push the installer build definition, then upload the EXE and checksum to the existing 1.1.0 draft Release.
+- Review and merge PR #2, then publish the already-populated 1.1.0 draft Release.
