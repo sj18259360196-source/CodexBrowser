@@ -4,7 +4,7 @@ Codex Browser gives Codex a visible, persistent browser workspace. The normal ru
 
 Release status: version `1.1.0` adds the opt-in ordinary Edge extension relay and hardens Cloudflare/Turnstile and publisher-PDF compatibility while retaining the accepted 1.0.0 managed-Edge baseline. The 1.1.0 delta passed type, build, targeted regression, Edge smoke, renderer, package, and plugin validation.
 
-The formal Windows x64 portable artifact is produced with `npm run package:win` under `release/`, together with its SHA-256 checksum. The package contains the production build, production dependencies, Electron control-center runtime, and unpacked ordinary-Edge relay extension. It requires Node.js `22.13.0` or newer and an installed Microsoft Edge `109` or newer. Release notes are in `docs/release/RELEASE_NOTES_1.1.0.md`.
+The formal Windows x64 portable artifact is produced with `npm run package:win`. A standard per-user EXE installer is produced with `npm run package:installer`; it adds Start Menu and optional desktop shortcuts plus a normal uninstall entry. Both artifacts and their SHA-256 files are written under `release/`. They contain the production build, production dependencies, Electron control-center runtime, and unpacked ordinary-Edge relay extension. Node.js `22.13.0` or newer and Microsoft Edge `109` or newer are required. Release notes are in `docs/release/RELEASE_NOTES_1.1.0.md`.
 
 ## Start
 

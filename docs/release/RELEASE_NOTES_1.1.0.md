@@ -13,7 +13,7 @@ Codex Browser 1.1.0 adds an opt-in ordinary Microsoft Edge extension relay while
 
 ## Install And Start
 
-The Windows x64 portable package requires Windows, Microsoft Edge 109 or newer, and Node.js 22.13.0 or newer. Extract the archive to a writable directory and double-click `start-local.cmd`.
+The Windows x64 release provides both a portable ZIP and a standard per-user EXE installer. The installer creates a Start Menu shortcut, optionally creates a desktop shortcut, and registers a normal uninstaller without requiring administrator privileges. Both forms require Windows, Microsoft Edge 109 or newer, and Node.js 22.13.0 or newer. Portable users can extract the ZIP and double-click `start-local.cmd`.
 
 The default `external-edge` runtime needs no extension. To use the ordinary Edge Profile:
 
@@ -31,6 +31,6 @@ The default `external-edge` runtime needs no extension. To use the ordinary Edge
 
 ## Verification
 
-The 1.1.0 delta passed TypeScript checking, production builds, runtime-selection and relay authentication tests, 19 challenge/PDF compatibility regressions, Edge lifecycle smoke testing, two-viewport renderer checks with zero console errors, release archive extraction smoke testing, and personal-plugin validation.
+The 1.1.0 delta passed TypeScript checking, production builds, runtime-selection and relay authentication tests, 19 challenge/PDF compatibility regressions, Edge lifecycle smoke testing, two-viewport renderer checks with zero console errors, portable archive extraction smoke testing, silent installer installation/uninstallation testing, and personal-plugin validation.
 
 See `README.md` for operating guidance and remaining limitations.

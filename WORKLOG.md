@@ -1,5 +1,6 @@
 # Codex Browser Work Log
 
+- [2026-07-19 05 - Windows installer packaging](docs/worklogs/2026-07-19-05-windows-installer.md): Added a repeatable per-user Windows EXE installer with shortcuts, uninstaller, checksum, and silent install/uninstall verification.
 - [2026-07-19 04 - Release 1.1.0 packaging and publication](docs/worklogs/2026-07-19-04-release-1.1.0.md): Versioned, packaged, verified, and published the ordinary Edge relay and challenge/PDF compatibility release.
 - [2026-07-19 03 - Ordinary Edge extension relay](docs/worklogs/2026-07-19-03-edge-extension-relay.md): Added an authenticated MV3 extension relay runtime for controlling tabs in the user's ordinary Edge profile while retaining CodexBrowser's existing action policy.
 - [2026-07-19 02 - ACS challenge loop](docs/worklogs/2026-07-19-02-acs-challenge-loop.md): Fixed PDF interception so ACS Cloudflare HTML and authentication responses pass through untouched, and documented the safe ordinary-Edge relay direction.
