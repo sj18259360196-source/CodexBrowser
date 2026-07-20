@@ -26,13 +26,14 @@ Consolidate the latest Codex Browser work onto `main`, preserve the current work
 - `npm run test:edge-relay`: passed with 3 tests.
 - `npm run smoke:mcp`: discovered all 39 tools, but failed because the isolated Electron runtime timed out on `browser.status` and `session.check`, then could not fully remove its locked temporary profile during cleanup.
 - Reviewed all untracked worklogs and smoke scripts for sensitive data before staging.
+- Pushed both `main` and `agent/edge-extension-relay-1.1.0` to GitHub at commit `183bd75` after transient HTTPS connection failures cleared.
 
 ## Known Issues
 
-- GitHub fetch was attempted twice and both HTTPS connections were reset before remote state could be refreshed.
+- GitHub fetch was attempted twice and both HTTPS connections were reset before remote state could be refreshed; the later non-force push succeeded, confirming the remote refs accepted the fast-forward updates.
 - The MCP smoke remains sensitive to an unresponsive local Electron runtime and a locked temporary profile during cleanup.
 
 ## Next Steps
 
-- Confirm the final GitHub push result and retry remote publication when connectivity is available if required.
+- Use the updated `main` branch as the base for subsequent work.
 - Investigate the isolated Electron smoke cleanup path if the MCP timeout repeats in a clean runtime session.
