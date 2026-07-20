@@ -23,6 +23,11 @@ export interface EdgeProfileLocation {
   profileDir: string;
 }
 
+export interface EdgeProfileProcessProbe {
+  isAlive(pid: number | undefined): boolean | undefined;
+  findOwnedEdges(profileDir: string): number[];
+}
+
 export function assertPathWithin(rootDir: string, candidate: string): void {
   const root = path.resolve(rootDir);
   const target = path.resolve(candidate);
@@ -54,15 +59,19 @@ function processAlive(pid: number | undefined): boolean | undefined {
 function findConfirmedOwnedEdges(profileDir: string): number[] {
   if (process.platform !== "win32") return [];
   const command = "Get-CimInstance Win32_Process -Filter \"Name = 'msedge.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($env:CODEX_BROWSER_PROFILE,[System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.CommandLine.IndexOf('--remote-debugging-port=0',[System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.CommandLine.IndexOf('--type=',[System.StringComparison]::OrdinalIgnoreCase) -lt 0 } | Select-Object -ExpandProperty ProcessId";
-  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
-    env: { ...process.env, CODEX_BROWSER_PROFILE: path.resolve(profileDir) },
-    encoding: "utf8", windowsHide: true, timeout: 10_000,
-  });
-  if (result.error || result.status !== 0) {
-    throw new Error("Codex Browser could not verify ownership of the remaining Edge process. Close the dedicated Edge window and retry.");
+  for (const executable of ["powershell.exe", "pwsh.exe"]) {
+    const result = spawnSync(executable, ["-NoProfile", "-NonInteractive", "-Command", command], {
+      env: { ...process.env, CODEX_BROWSER_PROFILE: path.resolve(profileDir) },
+      encoding: "utf8", windowsHide: true, timeout: 5_000,
+    });
+    if (!result.error && result.status === 0) {
+      return result.stdout.split(/\r?\n/).map((value) => Number.parseInt(value.trim(), 10)).filter((value) => Number.isInteger(value) && value > 0);
+    }
   }
-  return result.stdout.split(/\r?\n/).map((value) => Number.parseInt(value.trim(), 10)).filter((value) => Number.isInteger(value) && value > 0);
+  throw new Error("Codex Browser could not verify ownership of the remaining Edge process. Close the dedicated Edge window and retry.");
 }
+
+const defaultProcessProbe: EdgeProfileProcessProbe = { isAlive: processAlive, findOwnedEdges: findConfirmedOwnedEdges };
 
 function acquireGuard(profileDir: string): () => void {
   const guardPath = path.join(profileDir, ACQUIRE_FILE);
@@ -88,7 +97,12 @@ function acquireGuard(profileDir: string): () => void {
   };
 }
 
-export function acquireEdgeProfile(profileDir: string, profileRoot: string, browserVersion = "unknown"): EdgeProfileLease {
+export function acquireEdgeProfile(
+  profileDir: string,
+  profileRoot: string,
+  browserVersion = "unknown",
+  processProbe: EdgeProfileProcessProbe = defaultProcessProbe,
+): EdgeProfileLease {
   assertPathWithin(profileRoot, profileDir);
   mkdirSync(profileDir, { recursive: true });
   const releaseGuard = acquireGuard(profileDir);
@@ -114,10 +128,10 @@ export function acquireEdgeProfile(profileDir: string, profileRoot: string, brow
       try { lock = JSON.parse(readFileSync(lockPath, "utf8")); } catch {
         throw new Error("The dedicated Edge profile lock is unreadable. Close the managed Edge window and use profile recovery before retrying.");
       }
-      const brokerAlive = processAlive(lock.pid);
-      const browserAlive = processAlive(lock.browserPid);
+      const brokerAlive = processProbe.isAlive(lock.pid);
+      const browserAlive = processProbe.isAlive(lock.browserPid);
       if (brokerAlive === false) {
-        const ownedEdges = findConfirmedOwnedEdges(profileDir);
+        const ownedEdges = processProbe.findOwnedEdges(profileDir);
         if (ownedEdges.length === 1) {
           recoveredBrowserPid = ownedEdges[0];
           unlinkSync(lockPath);

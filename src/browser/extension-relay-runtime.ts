@@ -30,6 +30,7 @@ export class ExtensionRelayRuntime implements BrowserRuntime<EdgeBrowserAdapter>
   async attach(): Promise<BrowserConnection<EdgeBrowserAdapter>> { return this.start(); }
   async status(): Promise<BrowserRuntimeStatus> {
     if (this.state === "ready" && !this.transport.isConnected()) { this.state = "connecting"; this.detail = "Ordinary Edge relay disconnected"; }
+    if (this.state === "connecting" && this.transport.isConnected()) { this.state = "ready"; this.detail = "Ordinary Edge relay is connected"; }
     return { state: this.state, browserName: "Microsoft Edge", managed: false, detail: this.detail };
   }
   async show(): Promise<void> { await this.adapter.show(); }

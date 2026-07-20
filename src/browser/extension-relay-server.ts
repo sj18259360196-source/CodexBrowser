@@ -23,6 +23,7 @@ export class ExtensionRelayServer {
   private readonly productRoot: string;
   readonly port: number;
   private server: Server | null = null;
+  private startPromise: Promise<void> | null = null;
   private readonly commandQueue: RelayCommand[] = [];
   private readonly responseListeners = new Set<(responses: RelayResponse[], events: RelayEvent[]) => void>();
   private waitingResponse: ServerResponse | null = null;
@@ -39,14 +40,30 @@ export class ExtensionRelayServer {
 
   async start(): Promise<void> {
     if (this.server) return;
-    this.server = createServer((request, response) => void this.handle(request, response));
-    await new Promise<void>((resolve, reject) => {
-      this.server!.once("error", reject);
-      this.server!.listen(this.port, "127.0.0.1", () => { this.server!.removeListener("error", reject); resolve(); });
+    if (this.startPromise) return this.startPromise;
+    const server = createServer((request, response) => void this.handle(request, response));
+    const startPromise = new Promise<void>((resolve, reject) => {
+      const fail = (error: Error) => {
+        server.removeListener("error", fail);
+        reject(error);
+      };
+      server.once("error", fail);
+      server.listen(this.port, "127.0.0.1", () => {
+        server.removeListener("error", fail);
+        this.server = server;
+        resolve();
+      });
     });
+    this.startPromise = startPromise;
+    try {
+      await startPromise;
+    } finally {
+      if (this.startPromise === startPromise) this.startPromise = null;
+    }
   }
 
   async stop(): Promise<void> {
+    await this.startPromise?.catch(() => undefined);
     this.flushWaiting([]);
     const server = this.server; this.server = null;
     if (!server) return;

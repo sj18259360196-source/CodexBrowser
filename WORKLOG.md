@@ -1,5 +1,12 @@
 # Codex Browser Work Log
 
+- [2026-07-20 07 - Merge latest and publish](docs/worklogs/2026-07-20-07-merge-latest-and-publish.md): Consolidated the latest feature branch and reviewed worktree changes, verified the combined state, fast-forwarded `main`, and published the updated branches to GitHub.
+- [2026-07-20 06 - FontBox per-font save progress](docs/worklogs/2026-07-20-06-fontbox-item-save-progress.md): Scoped FontBox save progress labels to the requested Windows font IDs while retaining the global import lock, with a delayed Playwright regression check.
+- [2026-07-20 05 - FontBox preview CORS fix](docs/worklogs/2026-07-20-05-fontbox-preview-cors.md): Restored saved-but-uninstalled font previews by enabling CORS for the FontBox custom font protocol and verified all live preview loads under Electron 43.
+- [2026-07-20 04 - ACS topic live test](docs/worklogs/2026-07-20-04-acs-topic-live-test.md): Tested ten research-relevant ACS/EST pages in the user's ordinary Edge session and separated abstract access, PDF/SI discovery, institutional entitlement, relay download limits, and local extraction results.
+- [2026-07-20 03 - Random literature batch](docs/worklogs/2026-07-20-03-random-literature-batch.md): Added and ran a randomized ten-paper arXiv download, import, extraction, and search batch with per-paper diagnostics.
+- [2026-07-20 02 - Literature download verification](docs/worklogs/2026-07-20-02-literature-download-verification.md): Verified deterministic and public PDF workflows and added a reusable real-paper arXiv download, import, read, and search smoke test.
+- [2026-07-20 01 - Relay and profile stability](docs/worklogs/2026-07-20-01-relay-profile-stability.md): Hardened relay startup/reconnect behavior, made profile process discovery resilient across PowerShell variants, and removed environment-dependent lock recovery tests.
 - [2026-07-19 06 - Node version launcher fix](docs/worklogs/2026-07-19-06-node-version-launcher.md): Replaced fragile batch metacharacter version logic with a tested Node checker so Node 24 and future supported versions launch correctly.
 - [2026-07-19 05 - Windows installer packaging](docs/worklogs/2026-07-19-05-windows-installer.md): Added a repeatable per-user Windows EXE installer with shortcuts, uninstaller, checksum, and silent install/uninstall verification.
 - [2026-07-19 04 - Release 1.1.0 packaging and publication](docs/worklogs/2026-07-19-04-release-1.1.0.md): Versioned, packaged, verified, and published the ordinary Edge relay and challenge/PDF compatibility release.

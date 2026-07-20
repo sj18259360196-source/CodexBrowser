@@ -25,6 +25,10 @@ export class ExtensionRelayCdpTransport implements CdpTransport {
     const error = new Error("The ordinary Edge relay control connection was closed.");
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
     this.pending.clear();
+    for (const group of this.waiters.values()) {
+      for (const waiter of group) { clearTimeout(waiter.timer); waiter.reject(error); }
+    }
+    this.waiters.clear();
   }
   dispose(): void { this.unsubscribe(); void this.disconnect(); }
   isConnected(): boolean { return this.active && this.relay.connected(); }

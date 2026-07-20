@@ -9,6 +9,7 @@ import {
   assertPathWithin,
   removeArchivedEdgeProfile,
   resolvePrimaryEdgeProfile,
+  type EdgeProfileProcessProbe,
 } from "../src/browser/edge-profile.ts";
 
 function temporaryRoot(): string {
@@ -57,14 +58,31 @@ test("ownership metadata contains only the approved fields and lock is exclusive
 test("a lock is reclaimed only when both recorded processes are confirmed gone", () => {
   const root = temporaryRoot();
   const profile = path.join(root, "primary");
+  const noProcesses: EdgeProfileProcessProbe = { isAlive: (pid) => pid ? false : undefined, findOwnedEdges: () => [] };
   try {
     const lease = acquireEdgeProfile(profile, root);
     lease.release();
     writeFileSync(path.join(profile, ".codex-browser-profile.lock"), JSON.stringify({ instanceId: "stale", pid: 2_000_000_001, browserPid: 2_000_000_002 }));
-    const recovered = acquireEdgeProfile(profile, root);
+    const recovered = acquireEdgeProfile(profile, root, "unknown", noProcesses);
     recovered.release();
     writeFileSync(path.join(profile, ".codex-browser-profile.lock"), JSON.stringify({ instanceId: "uncertain", pid: 2_000_000_001 }));
-    assert.throws(() => acquireEdgeProfile(profile, root), /already in use|recovery|could not be confirmed/i);
+    assert.throws(() => acquireEdgeProfile(profile, root, "unknown", noProcesses), /already in use|recovery|could not be confirmed/i);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a confirmed owned Edge process is recovered without trusting the stale browser PID", () => {
+  const root = temporaryRoot();
+  const profile = path.join(root, "primary");
+  const ownedEdgePid = 42_424;
+  const probe: EdgeProfileProcessProbe = { isAlive: (pid) => pid ? false : undefined, findOwnedEdges: () => [ownedEdgePid] };
+  try {
+    const lease = acquireEdgeProfile(profile, root);
+    lease.release();
+    writeFileSync(path.join(profile, ".codex-browser-profile.lock"), JSON.stringify({ instanceId: "stale", pid: 2_000_000_001, browserPid: 2_000_000_002 }));
+    const recovered = acquireEdgeProfile(profile, root, "unknown", probe);
+    assert.equal(recovered.recovered, true);
+    assert.equal(recovered.browserPid, ownedEdgePid);
+    recovered.release();
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
